@@ -48,7 +48,8 @@ def generate_launch_description():
         output='screen',
         parameters=[
           {
-            'default_action_bt_xml_filename': default_action_bt_xml_filename
+            'default_action_bt_xml_filename': default_action_bt_xml_filename,
+            'enable_groot_monitoring': False
           },
           params_file
         ])

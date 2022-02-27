@@ -135,7 +135,7 @@ TEST(action_execution, protocol_basic)
   std::vector<plansys2_msgs::msg::ActionExecution> action_execution_msgs;
 
   auto action_hub_sub = test_node->create_subscription<plansys2_msgs::msg::ActionExecution>(
-    "/actions_hub", rclcpp::QoS(100).reliable(),
+    "actions_hub", rclcpp::QoS(100).reliable(),
     [&action_execution_msgs](const plansys2_msgs::msg::ActionExecution::SharedPtr msg) {
       action_execution_msgs.push_back(*msg);
     });
@@ -250,7 +250,7 @@ TEST(action_execution, protocol_cancelation)
   std::vector<plansys2_msgs::msg::ActionExecution> action_execution_msgs;
 
   auto action_hub_sub = test_node->create_subscription<plansys2_msgs::msg::ActionExecution>(
-    "/actions_hub", rclcpp::QoS(100).reliable(),
+    "actions_hub", rclcpp::QoS(100).reliable(),
     [&action_execution_msgs](const plansys2_msgs::msg::ActionExecution::SharedPtr msg) {
       action_execution_msgs.push_back(*msg);
     });

@@ -27,7 +27,7 @@ ExecutionLogger::ExecutionLogger()
 : Node("execution_logger")
 {
   action_execution_sub_ = create_subscription<plansys2_msgs::msg::ActionExecution>(
-    "/actions_hub", 100,
+    "actions_hub", 100,
     [&](plansys2_msgs::msg::ActionExecution::UniquePtr msg) {
       action_execution_log_.push_back(std::move(*msg));
     });
