@@ -218,26 +218,67 @@ BTBuilder::get_node_satisfy(
 bool
 BTBuilder::is_parallelizable(
   const plansys2::ActionStamped & action,
-  const std::list<GraphNode::Ptr> & ret) const
+  const std::vector<plansys2::Predicate> & predicates,
+  const std::vector<plansys2::Function> & functions,
+  const std::list<GraphNode::Ptr> & nodes) const
 {
-  std::vector<plansys2_msgs::msg::Node> action_at_start_requirements;
-  parser::pddl::getPredicates(action_at_start_requirements, action.action->at_start_requirements);
+  // Since we do not know exactly when 2 parallel actions will overlap,
+  // we must check for contradictions at any point in time.
+  // For example, in the case of a unary resource an "at start" effect
+  // may trun on a predicate, but an "at end" effect may turn it off.
 
-  for (const auto & other : ret) {
-    std::vector<plansys2_msgs::msg::Node> other_over_all_requirements;
-    parser::pddl::getPredicates(
-      other_over_all_requirements,
-      other->action.action->over_all_requirements);
+  // Apply the "at start" effects of the new action.
+  auto preds = predicates;
+  auto funcs = functions;
+  apply(action.action->at_start_effects, preds, funcs);
 
-    for (const auto & prev_over_all_req : other_over_all_requirements) {
-      for (const auto & action_at_start_req : action_at_start_requirements) {
-        if (parser::pddl::toString(prev_over_all_req) ==
-          parser::pddl::toString(action_at_start_req) &&
-          prev_over_all_req.negate == action_at_start_req.negate)
-        {
-          return false;
-        }
-      }
+  // Check the requirements of the actions in the input set.
+  for (const auto & other : nodes) {
+    if (!(check(other->action.action->at_start_requirements, preds, funcs) &&
+      check(other->action.action->over_all_requirements, preds, funcs) &&
+      check(other->action.action->at_end_requirements, preds, funcs)))
+    {
+      return false;
+    }
+  }
+
+  // Apply the "at end" effects of the new action.
+  apply(action.action->at_end_effects, preds, funcs);
+
+  // Check the requirements of the actions in the input set.
+  for (const auto & other : nodes) {
+    if (!(check(other->action.action->at_start_requirements, preds, funcs) &&
+      check(other->action.action->over_all_requirements, preds, funcs) &&
+      check(other->action.action->at_end_requirements, preds, funcs)))
+    {
+      return false;
+    }
+  }
+
+  // Apply the effects of the actions in the input set one at a time.
+  for (const auto & other : nodes) {
+    // Apply the "at start" effects of the action.
+    preds = predicates;
+    funcs = functions;
+    apply(other->action.action->at_start_effects, preds, funcs);
+
+    // Check the requirements of the new action.
+    if (!(check(action.action->at_start_requirements, preds, funcs) &&
+      check(action.action->over_all_requirements, preds, funcs) &&
+      check(action.action->at_end_requirements, preds, funcs)))
+    {
+      return false;
+    }
+
+    // Apply the "at end" effects of the action.
+    apply(other->action.action->at_end_effects, preds, funcs);
+
+    // Check the requirements of the new action.
+    if (!(check(action.action->at_start_requirements, preds, funcs) &&
+      check(action.action->over_all_requirements, preds, funcs) &&
+      check(action.action->at_end_requirements, preds, funcs)))
+    {
+      return false;
     }
   }
 
@@ -274,7 +315,9 @@ BTBuilder::get_roots(
   auto it = action_sequence.begin();
   while (it != action_sequence.end()) {
     const auto & action = *it;
-    if (is_action_executable(action, predicates, functions) && is_parallelizable(action, ret)) {
+    if (is_action_executable(action, predicates, functions) &&
+      is_parallelizable(action, predicates, functions, ret))
+    {
       auto new_root = GraphNode::make_shared();
       new_root->action = action;
       new_root->node_num = node_counter++;
@@ -318,7 +361,7 @@ BTBuilder::prune_backwards(GraphNode::Ptr new_node, GraphNode::Ptr node_satisfy)
   auto it = node_satisfy->out_arcs.begin();
   while (it != node_satisfy->out_arcs.end()) {
     if (*it == new_node) {
-      (*it)->in_arcs.erase(*it);
+      (*it)->in_arcs.remove(*it);
       it = node_satisfy->out_arcs.erase(it);
     } else {
       ++it;
@@ -416,8 +459,16 @@ BTBuilder::get_graph(const plansys2_msgs::msg::Plan & current_plan)
         prune_backwards(new_node, node_satisfy);
 
         // Create the connections to the parent node
-        new_node->in_arcs.insert(node_satisfy);
-        node_satisfy->out_arcs.insert(new_node);
+        if (std::find(new_node->in_arcs.begin(), new_node->in_arcs.end(), node_satisfy) ==
+          new_node->in_arcs.end())
+        {
+          new_node->in_arcs.push_back(node_satisfy);
+        }
+        if (std::find(node_satisfy->out_arcs.begin(), node_satisfy->out_arcs.end(), new_node) ==
+          node_satisfy->out_arcs.end())
+        {
+          node_satisfy->out_arcs.push_back(new_node);
+        }
 
         // Copy the state from the parent node
         new_node->predicates = node_satisfy->predicates;
@@ -449,8 +500,16 @@ BTBuilder::get_graph(const plansys2_msgs::msg::Plan & current_plan)
         prune_backwards(new_node, node_satisfy);
 
         // Create the connections to the parent node
-        new_node->in_arcs.insert(node_satisfy);
-        node_satisfy->out_arcs.insert(new_node);
+        if (std::find(new_node->in_arcs.begin(), new_node->in_arcs.end(), node_satisfy) ==
+          new_node->in_arcs.end())
+        {
+          new_node->in_arcs.push_back(node_satisfy);
+        }
+        if (std::find(node_satisfy->out_arcs.begin(), node_satisfy->out_arcs.end(), new_node) ==
+          node_satisfy->out_arcs.end())
+        {
+          node_satisfy->out_arcs.push_back(new_node);
+        }
 
         // Copy the state from the parent node
         new_node->predicates = node_satisfy->predicates;
@@ -482,8 +541,16 @@ BTBuilder::get_graph(const plansys2_msgs::msg::Plan & current_plan)
         prune_backwards(new_node, node_satisfy);
 
         // Create the connections to the parent node
-        new_node->in_arcs.insert(node_satisfy);
-        node_satisfy->out_arcs.insert(new_node);
+        if (std::find(new_node->in_arcs.begin(), new_node->in_arcs.end(), node_satisfy) ==
+          new_node->in_arcs.end())
+        {
+          new_node->in_arcs.push_back(node_satisfy);
+        }
+        if (std::find(node_satisfy->out_arcs.begin(), node_satisfy->out_arcs.end(), new_node) ==
+          node_satisfy->out_arcs.end())
+        {
+          node_satisfy->out_arcs.push_back(new_node);
+        }
 
         // Copy the state from the parent node
         new_node->predicates = node_satisfy->predicates;
@@ -514,8 +581,16 @@ BTBuilder::get_graph(const plansys2_msgs::msg::Plan & current_plan)
       functions);
 
     for (const auto & req : at_start_requirements) {
-      std::cerr << "===> [" << parser::pddl::toString(
+      std::cerr << "[ERROR] at_start_requirement not meet: [" << parser::pddl::toString(
         action_sequence.begin()->action->at_start_requirements, req) << "]" << std::endl;
+    }
+    for (const auto & req : over_all_requirements) {
+      std::cerr << "[ERROR] over_all_requirement not meet: [" << parser::pddl::toString(
+        action_sequence.begin()->action->over_all_requirements, req) << "]" << std::endl;
+    }
+    for (const auto & req : at_end_requirements) {
+      std::cerr << "[ERROR] at_end_requirement not meet: [" << parser::pddl::toString(
+        action_sequence.begin()->action->at_end_requirements, req) << "]" << std::endl;
     }
 
     assert(at_start_requirements.empty());
@@ -927,6 +1002,55 @@ BTBuilder::print_graph(const plansys2::Graph::Ptr & graph) const
   for (const auto & root : graph->roots) {
     print_node(root, 0, used_nodes);
   }
+}
+
+void
+BTBuilder::print_node_csv(const plansys2::GraphNode::Ptr & node, uint32_t root_num) const
+{
+  std::cerr << root_num << ", " <<
+    node->node_num << ", " <<
+    node->level_num << ", " <<
+    parser::pddl::nameActionsToString(node->action.action) << std::endl;
+  for (const auto & out : node->out_arcs) {
+    print_node_csv(out, root_num);
+  }
+}
+
+void
+BTBuilder::print_graph_csv(const plansys2::Graph::Ptr & graph) const
+{
+  uint32_t root_num = 0;
+  for (const auto & root : graph->roots) {
+    print_node_csv(root, root_num);
+    root_num++;
+  }
+}
+
+void
+BTBuilder::get_node_tabular(
+  const plansys2::GraphNode::Ptr & node,
+  uint32_t root_num,
+  std::vector<std::tuple<uint32_t, uint32_t, uint32_t, std::string>> & graph) const
+{
+  graph.push_back(
+    std::make_tuple(
+      root_num, node->node_num, node->level_num,
+      parser::pddl::nameActionsToString(node->action.action)));
+  for (const auto & out : node->out_arcs) {
+    get_node_tabular(out, root_num, graph);
+  }
+}
+
+std::vector<std::tuple<uint32_t, uint32_t, uint32_t, std::string>>
+BTBuilder::get_graph_tabular(const plansys2::Graph::Ptr & graph) const
+{
+  std::vector<std::tuple<uint32_t, uint32_t, uint32_t, std::string>> graph_tabular;
+  uint32_t root_num = 0;
+  for (const auto & root : graph->roots) {
+    get_node_tabular(root, root_num, graph_tabular);
+    root_num++;
+  }
+  return graph_tabular;
 }
 
 }  // namespace plansys2

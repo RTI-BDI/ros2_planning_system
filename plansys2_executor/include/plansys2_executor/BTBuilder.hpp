@@ -22,6 +22,7 @@
 #include <list>
 #include <map>
 #include <utility>
+#include <tuple>
 
 #include "std_msgs/msg/empty.hpp"
 
@@ -57,8 +58,8 @@ struct GraphNode
   std::vector<plansys2::Predicate> predicates;
   std::vector<plansys2::Function> functions;
 
-  std::set<GraphNode::Ptr> in_arcs;
-  std::set<GraphNode::Ptr> out_arcs;
+  std::list<GraphNode::Ptr> in_arcs;
+  std::list<GraphNode::Ptr> out_arcs;
 };
 
 struct Graph
@@ -121,6 +122,8 @@ protected:
     std::vector<plansys2::Function> & functions) const;
   bool is_parallelizable(
     const plansys2::ActionStamped & action,
+    const std::vector<plansys2::Predicate> & predicates,
+    const std::vector<plansys2::Function> & functions,
     const std::list<GraphNode::Ptr> & ret) const;
 
   std::string get_flow_tree(
@@ -147,6 +150,16 @@ protected:
     std::set<GraphNode::Ptr> & used_nodes) const;
 
   void print_graph(const plansys2::Graph::Ptr & graph) const;
+
+  void print_node_csv(const GraphNode::Ptr & node, uint32_t root_num) const;
+  void print_graph_csv(const plansys2::Graph::Ptr & graph) const;
+
+  void get_node_tabular(
+    const plansys2::GraphNode::Ptr & node,
+    uint32_t root_num,
+    std::vector<std::tuple<uint32_t, uint32_t, uint32_t, std::string>> & graph) const;
+  std::vector<std::tuple<uint32_t, uint32_t, uint32_t, std::string>> get_graph_tabular(
+    const plansys2::Graph::Ptr & graph) const;
 
   // bool is_predecessor(const PlanItem & op1, const PlanItem & op2);
   // void add_child(GraphNode & parent, GraphNode & new_child);
