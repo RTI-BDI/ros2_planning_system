@@ -131,14 +131,17 @@ void
 RQTPlan::fill_row_info(
   QTreeWidgetItem * row, const plansys2_msgs::msg::ActionExecutionInfo & info)
 {
-  switch (info.status) {
-    case plansys2_msgs::msg::ActionExecutionInfo::NOT_EXECUTED:
+  //switch (info.status) {
+    if(info.status == plansys2_msgs::msg::ActionExecutionInfo::NOT_EXECUTED)
+    {
       row->setText(1, QString("NOT_EXECUTED"));
       row->setText(
         4,
         "0.0 / " + QString::number(rclcpp::Duration(info.duration).seconds(), 'f', 5));
-      break;
-    case plansys2_msgs::msg::ActionExecutionInfo::EXECUTING:
+    }
+      //break;
+    else if(info.status == plansys2_msgs::msg::ActionExecutionInfo::EXECUTING)
+    {
       row->setText(1, QString("EXECUTING"));
       row->setText(2, QString::number(info.completion));
       row->setText(3, QString(info.message_status.c_str()));
@@ -149,8 +152,10 @@ RQTPlan::fill_row_info(
       for (int i = 0; i < 5; i++) {
         row->setBackground(i, Qt::darkGreen);
       }
-      break;
-    case plansys2_msgs::msg::ActionExecutionInfo::FAILED:
+    }
+      //break;
+    else if(info.status == plansys2_msgs::msg::ActionExecutionInfo::FAILED)
+    {
       row->setText(1, QString("FAILED"));
       row->setText(2, QString::number(info.completion));
       row->setText(3, QString(info.message_status.c_str()));
@@ -161,8 +166,10 @@ RQTPlan::fill_row_info(
       for (int i = 0; i < 5; i++) {
         row->setBackground(i, Qt::red);
       }
-      break;
-    case plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED:
+    }
+      //break;
+    else if(info.status == plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED)
+    {
       row->setText(1, QString("SUCCEEDED"));
       row->setText(2, QString::number(1.0));
       row->setText(3, QString(info.message_status.c_str()));
@@ -173,8 +180,10 @@ RQTPlan::fill_row_info(
       for (int i = 0; i < 5; i++) {
         row->setBackground(i, Qt::green);
       }
-      break;
-    case plansys2_msgs::msg::ActionExecutionInfo::CANCELLED:
+    }
+      //break;
+    else if(info.status == plansys2_msgs::msg::ActionExecutionInfo::CANCELLED)
+    {
       row->setText(1, QString("CANCELLED"));
       row->setText(2, QString::number(info.completion));
       row->setText(3, QString(info.message_status.c_str()));
@@ -185,8 +194,9 @@ RQTPlan::fill_row_info(
       for (int i = 0; i < 5; i++) {
         row->setBackground(i, Qt::lightGray);
       }
-      break;
-  }
+    }
+      //break;
+  //}
 }
 
 void

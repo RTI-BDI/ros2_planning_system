@@ -87,23 +87,23 @@ LoggerNode::action_execution_info_callback(plansys2_msgs::msg::ActionExecutionIn
   std::ostringstream output;
 
   std::string status = "UNKNOWN";
-  switch (msg->status) {
-    case plansys2_msgs::msg::ActionExecutionInfo::NOT_EXECUTED:
+  //switch (msg->status) {
+    if(msg->status == plansys2_msgs::msg::ActionExecutionInfo::NOT_EXECUTED)
       status = "NOT EXECUTED";
-      break;
-    case plansys2_msgs::msg::ActionExecutionInfo::EXECUTING:
+      //break;
+    else if(msg->status == plansys2_msgs::msg::ActionExecutionInfo::EXECUTING)
       status = "EXECUTING";
-      break;
-    case plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED:
+      //break;
+    else if(msg->status == plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED)
       status = "SUCCEEDED";
-      break;
-    case plansys2_msgs::msg::ActionExecutionInfo::CANCELLED:
+      //break;
+    else if(msg->status == plansys2_msgs::msg::ActionExecutionInfo::CANCELLED)
       status = "CANCELLED";
-      break;
-    case plansys2_msgs::msg::ActionExecutionInfo::FAILED:
+      //break;
+    else if(msg->status == plansys2_msgs::msg::ActionExecutionInfo::FAILED)
       status = "FAILED";
-      break;
-  }
+      //break;
+  //}
 
   output << std::fixed << std::setprecision(5);
   output << "[Action Execution Info] Action: " << msg->action_full_name <<
@@ -119,21 +119,21 @@ LoggerNode::action_execution_info_callback(plansys2_msgs::msg::ActionExecutionIn
   output << "Completion: " << msg->completion <<
     " -- Status message: " << msg->status << std::endl;
 
-  switch (msg->status) {
-    case plansys2_msgs::msg::ActionExecutionInfo::NOT_EXECUTED:
+  //switch (msg->status) {
+    if(msg->status == plansys2_msgs::msg::ActionExecutionInfo::NOT_EXECUTED)
       RCLCPP_DEBUG_STREAM(get_logger(), output.str());
-      break;
-    case plansys2_msgs::msg::ActionExecutionInfo::EXECUTING:
-    case plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED:
+      //break;
+    else if(msg->status == plansys2_msgs::msg::ActionExecutionInfo::EXECUTING ||
+        msg->status == plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED)
       RCLCPP_INFO_STREAM(get_logger(), output.str());
-      break;
-    case plansys2_msgs::msg::ActionExecutionInfo::CANCELLED:
+      //break;
+    else if(msg->status == plansys2_msgs::msg::ActionExecutionInfo::CANCELLED)
       RCLCPP_WARN_STREAM(get_logger(), output.str());
-      break;
-    case plansys2_msgs::msg::ActionExecutionInfo::FAILED:
+      //break;
+    else if(msg->status == plansys2_msgs::msg::ActionExecutionInfo::FAILED)
       RCLCPP_ERROR_STREAM(get_logger(), output.str());
-      break;
-  }
+      //break;
+  //}
 }
 
 void

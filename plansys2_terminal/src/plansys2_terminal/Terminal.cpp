@@ -806,20 +806,20 @@ Terminal::execute_plan(const plansys2_msgs::msg::Plan & plan)
       }
       std::cout << ") ";
 
-      switch (action_status.status) {
-        case plansys2_msgs::msg::ActionExecutionInfo::NOT_EXECUTED:
+      //switch (action_status.status) {
+        if(action_status.status == plansys2_msgs::msg::ActionExecutionInfo::NOT_EXECUTED)
           std::cout << "waiting]";
-          break;
-        case plansys2_msgs::msg::ActionExecutionInfo::EXECUTING:
+          //break;
+        else if(action_status.status == plansys2_msgs::msg::ActionExecutionInfo::EXECUTING)
           std::cout << action_status.completion * 100.0 << "%]";
-          break;
-        case plansys2_msgs::msg::ActionExecutionInfo::FAILED:
+          //break;
+        else if(action_status.status == plansys2_msgs::msg::ActionExecutionInfo::FAILED)
           std::cout << "FAILED]";
-          break;
-        case plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED:
+          //break;
+        else if(action_status.status == plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED)
           std::cout << "succeeded]";
-          break;
-      }
+          //break;
+      //}
     }
 
     std::cout << std::flush;

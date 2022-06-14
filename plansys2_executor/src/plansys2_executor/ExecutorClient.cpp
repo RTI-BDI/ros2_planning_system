@@ -100,44 +100,44 @@ ExecutorClient::execute_and_check_plan()
       } else {
         RCLCPP_ERROR(node_->get_logger(), "Plan Failed");
         for (auto msg : result_.result->action_execution_status) {
-          switch (msg.status) {
-            case plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED:
+          //switch (msg.status) {
+            if(msg.status == plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED)
               RCLCPP_WARN_STREAM(
                 node_->get_logger(),
                 "Action: " <<
                   msg.action_full_name <<
                   " succeeded with message_status: " <<
                   msg.message_status);
-              break;
-            case plansys2_msgs::msg::ActionExecutionInfo::FAILED:
+              //break;
+            else if(msg.status == plansys2_msgs::msg::ActionExecutionInfo::FAILED)
               RCLCPP_ERROR_STREAM(
                 node_->get_logger(),
                 "Action: " <<
                   msg.action_full_name <<
                   " failed with message_status: " <<
                   msg.message_status);
-              break;
-            case plansys2_msgs::msg::ActionExecutionInfo::NOT_EXECUTED:
+              //break;
+            else if(msg.status == plansys2_msgs::msg::ActionExecutionInfo::NOT_EXECUTED)
               RCLCPP_WARN_STREAM(
                 node_->get_logger(),
                 "Action: " <<
                   msg.action_full_name <<
                   " was not executed");
-              break;
-            case plansys2_msgs::msg::ActionExecutionInfo::CANCELLED:
+              //break;
+            else if(msg.status == plansys2_msgs::msg::ActionExecutionInfo::CANCELLED)
               RCLCPP_WARN_STREAM(
                 node_->get_logger(),
                 "Action: " <<
                   msg.action_full_name <<
                   " was cancelled");
-              break;
-            case plansys2_msgs::msg::ActionExecutionInfo::EXECUTING:
+              //break;
+            else if(msg.status == plansys2_msgs::msg::ActionExecutionInfo::EXECUTING)
               RCLCPP_WARN_STREAM(
                 node_->get_logger(),
                 "Action: " <<
                   msg.action_full_name <<
                   " was executing");
-          }
+          //}
         }
       }
       break;

@@ -1,15 +1,17 @@
-int8 NOT_EXECUTED=1
-int8 EXECUTING=2
-int8 FAILED=3
-int8 SUCCEEDED=4
-int8 CANCELLED=5
+string NOT_EXECUTED="1"
+string EXECUTING="2"
+string FAILED="3"
+string SUCCEEDED="4"
+string CANCELLED="5"
 
-int8 status
+string status
 
 builtin_interfaces/Time start_stamp
 builtin_interfaces/Time status_stamp
 
 string action_full_name
+
+string[] waiting_actions
 
 string action
 string[] arguments

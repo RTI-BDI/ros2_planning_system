@@ -39,6 +39,11 @@
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "rclcpp_lifecycle/lifecycle_publisher.hpp"
 
+#include "behaviortree_cpp_v3/behavior_tree.h"
+#include "behaviortree_cpp_v3/bt_factory.h"
+#include "behaviortree_cpp_v3/utils/shared_library.h"
+#include "behaviortree_cpp_v3/blackboard.h"
+
 namespace plansys2
 {
 
@@ -96,6 +101,8 @@ protected:
 
   rclcpp::Service<plansys2_msgs::srv::GetPlan>::SharedPtr get_plan_service_;
 
+  std::map<std::string, std::vector<std::string>> actions_waiting_map_;
+
   rclcpp_action::GoalResponse handle_goal(
     const rclcpp_action::GoalUUID & uuid,
     std::shared_ptr<const ExecutePlan::Goal> goal);
@@ -112,6 +119,8 @@ protected:
 
   void print_execution_info(
     std::shared_ptr<std::map<std::string, ActionExecutionInfo>> exec_info);
+
+  std::map<std::string, std::vector<std::string>> build_actions_waiting_map(const BT::Tree& tree);
 };
 
 }  // namespace plansys2

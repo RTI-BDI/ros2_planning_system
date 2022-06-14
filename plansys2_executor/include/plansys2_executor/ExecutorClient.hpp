@@ -47,7 +47,11 @@ public:
   std::vector<plansys2_msgs::msg::Tree> getOrderedSubGoals();
   std::optional<plansys2_msgs::msg::Plan> getPlan();
 
-  ExecutePlan::Feedback getFeedBack() {return feedback_;}
+  ExecutePlan::Feedback getFeedBack() {
+    // for(auto fas : feedback_.action_execution_status)
+    //     std::cout << "Feed: getFeedback " << fas.action_full_name << ": "  <<  fas.status << "b" << std::endl << std::endl << std::endl << std::endl << std::flush;
+    return feedback_;
+  }
   std::optional<ExecutePlan::Result> getResult();
 
 private:

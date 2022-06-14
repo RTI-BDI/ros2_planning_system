@@ -105,6 +105,7 @@ protected:
 
 struct ActionExecutionInfo
 {
+  std::vector<std::string> waiting_actions;
   std::shared_ptr<ActionExecutor> action_executor = {nullptr};
   bool at_start_effects_applied = {false};
   bool at_end_effects_applied = {false};

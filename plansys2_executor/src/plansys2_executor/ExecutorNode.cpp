@@ -35,10 +35,10 @@
 
 #include "ament_index_cpp/get_package_share_directory.hpp"
 
-#include "behaviortree_cpp_v3/behavior_tree.h"
-#include "behaviortree_cpp_v3/bt_factory.h"
-#include "behaviortree_cpp_v3/utils/shared_library.h"
-#include "behaviortree_cpp_v3/blackboard.h"
+// #include "behaviortree_cpp_v3/behavior_tree.h"
+// #include "behaviortree_cpp_v3/bt_factory.h"
+// #include "behaviortree_cpp_v3/utils/shared_library.h"
+// #include "behaviortree_cpp_v3/blackboard.h"
 
 #ifdef ZMQ_FOUND
 #include <behaviortree_cpp_v3/loggers/bt_zmq_publisher.h>
@@ -388,6 +388,8 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
   out.close();
 
   auto tree = factory.createTreeFromText(bt_xml_tree, blackboard);
+  
+  actions_waiting_map_ = build_actions_waiting_map(tree);
 
 #ifdef ZMQ_FOUND
   unsigned int publisher_port = this->get_parameter("publisher_port").as_int();
@@ -415,6 +417,7 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
     1s, [this, &action_map]() {
       auto msgs = get_feedback_info(action_map);
       for (const auto & msg : msgs) {
+        // std::cout << "Feed: execute " << msg.action_full_name << ": " << msg.status << "c" << std::endl << std::endl << std::endl << std::flush;
         execution_info_pub_->publish(msg);
       }
     });
@@ -481,6 +484,46 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
   }
 }
 
+std::map<std::string, std::vector<std::string>> ExecutorNode::build_actions_waiting_map(const BT::Tree& tree)
+{
+  std::map<std::string, std::vector<std::string>> actions_waiting_map;
+  //std::cout<< "\n\n\n\nNODE TYPE OF BTTREE:\n"; 
+  std::string block_bt_da;
+  for(auto tnode : tree.nodes){
+    if(tnode->name().find_first_of('(') != std::string::npos && 
+        tnode->name().find_first_of(')') != std::string::npos && 
+        tnode->name().find_first_of(':') != std::string::npos)
+    {
+      if(tnode->name() != block_bt_da)
+        block_bt_da = tnode->name();
+    }
+
+    std::string waiting = "";
+    if(tnode->name() == "WaitAction")
+    {
+      tnode->getInput("action", waiting);
+      // if(action_waiting_map.find(block_bt_da) == action_waiting_map.end())
+      //   action_waiting_map.insert(std::pair<std::string, std::vector<std::string>>(block_bt_da, std::vector<std::string>()));
+      // action_waiting_map.find(block_bt_da)->second.push_back(waiting);
+      actions_waiting_map[block_bt_da].push_back(waiting);
+      // std::cout << "Action " << block_bt_da << " has to wait for " << waiting << std::endl;
+    }
+    
+    //std::cout << tnode->UID() << "[" + block_bt_da + "]: " << tnode->name() << "\t" << tnode->type() << "\twaiting=" << waiting << std::endl;
+  }
+
+  // std::cout << "\n\nDevis è un genio umile e caritatevole: \n";
+  // for(auto entry : action_waiting_map)
+  // {
+  //   std::cout << entry.first << " (waiting for " + std::to_string(action_waiting_map[entry.first].size()) + " actions): ";
+  //   for(auto entry_value : action_waiting_map[entry.first])
+  //     std::cout << "\t" << entry_value << " ";
+  //   std::cout << std::endl << std::endl;
+  // }
+
+  return actions_waiting_map;
+}
+
 void
 ExecutorNode::handle_accepted(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
 {
@@ -506,26 +549,34 @@ ExecutorNode::get_feedback_info(
       case ActionExecutor::IDLE:
       case ActionExecutor::DEALING:
         info.status = plansys2_msgs::msg::ActionExecutionInfo::NOT_EXECUTED;
+        //std::cout << action.first << ": IDLE or DEALING\tassigning" <<  plansys2_msgs::msg::ActionExecutionInfo::NOT_EXECUTED << "#" << info.status << std::flush << std::endl;
         break;
       case ActionExecutor::RUNNING:
         info.status = plansys2_msgs::msg::ActionExecutionInfo::EXECUTING;
+        //std::cout << action.first << ": RUNNING\tassigning" <<  plansys2_msgs::msg::ActionExecutionInfo::EXECUTING << "#" << info.status << std::flush << std::endl;
         break;
       case ActionExecutor::SUCCESS:
         info.status = plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED;
+        //std::cout << action.first << ": SUCCESS\tassigning" <<  plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED << "#" << info.status << std::flush << std::endl;
         break;
       case ActionExecutor::FAILURE:
         info.status = plansys2_msgs::msg::ActionExecutionInfo::FAILED;
+        //std::cout << action.first << ": FAILURE\tassigning" <<  plansys2_msgs::msg::ActionExecutionInfo::FAILED << "#" << info.status << std::flush << std::endl;
         break;
       case ActionExecutor::CANCELLED:
         info.status = plansys2_msgs::msg::ActionExecutionInfo::CANCELLED;
+        //std::cout << action.first << ": CANCELLED\tassigning" <<  plansys2_msgs::msg::ActionExecutionInfo::CANCELLED << "#" << info.status << std::flush << std::endl;
+        break;
+      default:
+        // std::cout << action.first << ": STATUS assignment error!!!" << std::flush << std::endl;
         break;
     }
 
     info.action_full_name = action.first;
-
     info.start_stamp = action.second.action_executor->get_start_time();
     info.status_stamp = action.second.action_executor->get_status_time();
     info.action = action.second.action_executor->get_action_name();
+    info.waiting_actions = actions_waiting_map_[action.first];
 
     info.arguments = action.second.action_executor->get_action_params();
     info.duration = rclcpp::Duration::from_seconds(action.second.duration);
