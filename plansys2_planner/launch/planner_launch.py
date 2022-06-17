@@ -14,18 +14,25 @@
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.conditions import IfCondition
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
     namespace = LaunchConfiguration('namespace')
     params_file = LaunchConfiguration('params_file')
+    planning_mode = LaunchConfiguration('planning_mode')
 
     declare_namespace_cmd = DeclareLaunchArgument(
         'namespace',
         default_value='',
         description='Namespace')
+
+    declare_planning_mode_cmd = DeclareLaunchArgument(
+        'planning_mode',
+        default_value='offline',
+        description='planning_mode')
 
     # Specify the actions
     planner_cmd = Node(
@@ -34,12 +41,14 @@ def generate_launch_description():
         name='planner',
         namespace=namespace,
         output='screen',
+        condition=IfCondition(PythonExpression(["'", planning_mode, "' == 'offline'"])),
         parameters=[params_file])
 
     # Create the launch description and populate
     ld = LaunchDescription()
 
     ld.add_action(declare_namespace_cmd)
+    ld.add_action(declare_planning_mode_cmd)
 
     # Declare the launch options
     ld.add_action(planner_cmd)

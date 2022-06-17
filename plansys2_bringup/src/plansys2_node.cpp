@@ -37,11 +37,14 @@ int main(int argc, char ** argv)
   auto domain_node = std::make_shared<plansys2::DomainExpertNode>();
   auto problem_node = std::make_shared<plansys2::ProblemExpertNode>();
   auto planner_node = std::make_shared<plansys2::PlannerNode>();
+  planner_node->declare_parameter("planning_mode", "offline");
+  bool start_planner = planner_node->get_parameter("planning_mode").as_string() == "offline";
   auto executor_node = std::make_shared<plansys2::ExecutorNode>();
 
   exe.add_node(domain_node->get_node_base_interface());
   exe.add_node(problem_node->get_node_base_interface());
-  exe.add_node(planner_node->get_node_base_interface());
+  if(start_planner)  
+    exe.add_node(planner_node->get_node_base_interface());
   exe.add_node(executor_node->get_node_base_interface());
 
   std::map<std::string, std::shared_ptr<plansys2::LifecycleServiceClient>> manager_nodes;
@@ -49,8 +52,9 @@ int main(int argc, char ** argv)
     "domain_expert_lc_mngr", "domain_expert");
   manager_nodes["problem_expert"] = std::make_shared<plansys2::LifecycleServiceClient>(
     "problem_expert_lc_mngr", "problem_expert");
-  manager_nodes["planner"] = std::make_shared<plansys2::LifecycleServiceClient>(
-    "planner_lc_mngr", "planner");
+  if(start_planner)  
+    manager_nodes["planner"] = std::make_shared<plansys2::LifecycleServiceClient>(
+      "planner_lc_mngr", "planner");
   manager_nodes["executor"] = std::make_shared<plansys2::LifecycleServiceClient>(
     "executor_lc_mngr", "executor");
 

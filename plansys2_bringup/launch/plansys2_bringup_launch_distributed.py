@@ -16,8 +16,8 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 
-from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch import LaunchDescription, LaunchContext
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -30,6 +30,7 @@ def generate_launch_description():
     model_file = LaunchConfiguration('model_file')
     namespace = LaunchConfiguration('namespace')
     params_file = LaunchConfiguration('params_file')
+    planning_mode = LaunchConfiguration('planning_mode')
     default_action_bt_xml_filename = LaunchConfiguration('default_action_bt_xml_filename')
 
     declare_model_file_cmd = DeclareLaunchArgument(
@@ -40,6 +41,11 @@ def generate_launch_description():
         'namespace',
         default_value='',
         description='Namespace')
+    
+    declare_planning_mode_cmd = DeclareLaunchArgument(
+        'planning_mode',
+        default_value='offline',
+        description='planning_mode')
 
     declare_params_file_cmd = DeclareLaunchArgument(
         'params_file',
@@ -82,7 +88,8 @@ def generate_launch_description():
             'planner_launch.py')),
         launch_arguments={
           'namespace': namespace,
-          'params_file': params_file
+          'params_file': params_file,
+          'planning_mode': planning_mode
         }.items())
 
     executor_cmd = IncludeLaunchDescription(
@@ -111,6 +118,7 @@ def generate_launch_description():
     ld.add_action(declare_default_bt_file_cmd)
     ld.add_action(declare_namespace_cmd)
     ld.add_action(declare_params_file_cmd)
+    ld.add_action(declare_planning_mode_cmd)
 
     # Declare the launch options
     ld.add_action(domain_expert_cmd)
