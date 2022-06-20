@@ -33,7 +33,10 @@ namespace plansys2
 LifecycleServiceClient::LifecycleServiceClient(
   const std::string & node_name, const std::string & managed_node)
 : Node(node_name), managed_node_(managed_node)
-{}
+{
+  this->declare_parameter("planning_mode", "offline");
+  start_planner_ = this->get_parameter("planning_mode").as_string() == "offline";
+}
 
 void
 LifecycleServiceClient::init()
@@ -123,7 +126,8 @@ LifecycleServiceClient::change_state(std::uint8_t transition, std::chrono::secon
 bool
 startup_function(
   std::map<std::string, std::shared_ptr<LifecycleServiceClient>> & manager_nodes,
-  std::chrono::seconds timeout)
+  std::chrono::seconds timeout,
+  bool start_planner)
 {
   // configure domain_expert
   {
@@ -159,14 +163,14 @@ startup_function(
 
   // configure planner
   {
-    if (!manager_nodes["planner"]->change_state(
+    if (start_planner && !manager_nodes["planner"]->change_state(
         lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE,
         timeout))
     {
       return false;
     }
 
-    while (manager_nodes["planner"]->get_state() !=
+    while (start_planner && manager_nodes["planner"]->get_state() !=
       lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE)
     {
       std::cerr << "Waiting for inactive state for planner" << std::endl;
@@ -206,7 +210,7 @@ startup_function(
     {
       return false;
     }
-    if (!manager_nodes["planner"]->change_state(
+    if (start_planner && !manager_nodes["planner"]->change_state(
         lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE,
         timeout))
     {
@@ -224,7 +228,7 @@ startup_function(
     if (!manager_nodes["problem_expert"]->get_state()) {
       return false;
     }
-    if (!manager_nodes["planner"]->get_state()) {
+    if (start_planner && !manager_nodes["planner"]->get_state()) {
       return false;
     }
     if (!manager_nodes["executor"]->get_state()) {

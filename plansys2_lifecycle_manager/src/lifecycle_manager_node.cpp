@@ -37,15 +37,24 @@ int main(int argc, char ** argv)
   manager_nodes["executor"] = std::make_shared<plansys2::LifecycleServiceClient>(
     "executor_lc_mngr", "executor");
 
+  bool start_planner = true;
+
   rclcpp::executors::SingleThreadedExecutor exe;
   for (auto & manager_node : manager_nodes) {
-    manager_node.second->init();
-    exe.add_node(manager_node.second);
+    if(!manager_node.second->avoid_exec())
+    { 
+      // RCLCPP_INFO(rclcpp::get_logger("plansys2_lifecycle_manager"),
+      // "Adding node " + manager_node.first + " to executor");
+      manager_node.second->init();
+      exe.add_node(manager_node.second);
+
+    }else if(manager_node.first == "planner")
+      start_planner = false;
   }
 
   std::shared_future<bool> startup_future = std::async(
     std::launch::async,
-    std::bind(plansys2::startup_function, manager_nodes, std::chrono::seconds(5)));
+    std::bind(plansys2::startup_function, manager_nodes, std::chrono::seconds(5), start_planner));
   exe.spin_until_future_complete(startup_future);
 
   if (!startup_future.get()) {

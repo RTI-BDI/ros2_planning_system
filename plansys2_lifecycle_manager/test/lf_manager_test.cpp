@@ -118,7 +118,7 @@ TEST(lifecycle_manager, lf_startup)
 
   std::shared_future<bool> startup_future = std::async(
     std::launch::async,
-    std::bind(plansys2::startup_function, manager_nodes, std::chrono::seconds(3)));
+    std::bind(plansys2::startup_function, manager_nodes, std::chrono::seconds(3), true));
 
   startup_future.wait();
 

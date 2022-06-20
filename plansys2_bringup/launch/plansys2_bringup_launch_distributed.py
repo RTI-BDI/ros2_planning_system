@@ -109,7 +109,7 @@ def generate_launch_description():
         name='lifecycle_manager_node',
         namespace=namespace,
         output='screen',
-        parameters=[])
+        parameters=[{'planning_mode': planning_mode}])
 
     # Create the launch description and populate
     ld = LaunchDescription()

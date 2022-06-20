@@ -61,17 +61,22 @@ public:
     std::uint8_t transition,
     std::chrono::seconds time_out = std::chrono::seconds(3));
 
+  bool avoid_exec(){return !start_planner_ && managed_node_ == "planner";}
+
 private:
   std::shared_ptr<rclcpp::Client<lifecycle_msgs::srv::GetState>> client_get_state_;
   std::shared_ptr<rclcpp::Client<lifecycle_msgs::srv::ChangeState>> client_change_state_;
 
   std::string managed_node_;
+
+  bool start_planner_;
 };
 
 bool
 startup_function(
   std::map<std::string, std::shared_ptr<LifecycleServiceClient>> & manager_nodes,
-  std::chrono::seconds timeout);
+  std::chrono::seconds timeout,
+  bool start_planner);
 
 }  // namespace plansys2
 
