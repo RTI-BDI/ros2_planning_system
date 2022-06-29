@@ -27,6 +27,8 @@
 
 #include "plansys2_executor/behavior_tree/execute_action_node.hpp"
 
+#define MAX_FAILED_CHECKS 8
+
 namespace plansys2
 {
 
@@ -51,6 +53,7 @@ public:
 private:
   std::shared_ptr<std::map<std::string, ActionExecutionInfo>> action_map_;
   std::shared_ptr<plansys2::ProblemExpertClient> problem_client_;
+  uint8_t check_failed_counter_;
 };
 
 }  // namespace plansys2

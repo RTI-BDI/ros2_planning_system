@@ -34,6 +34,8 @@ WaitAtStartReq::WaitAtStartReq(
   problem_client_ =
     config().blackboard->get<std::shared_ptr<plansys2::ProblemExpertClient>>(
     "problem_client");
+  
+  check_failed_counter_ = 0;
 }
 
 BT::NodeStatus
@@ -55,7 +57,11 @@ WaitAtStartReq::tick()
       node->get_logger(),
       "[" << action << "]" << (*action_map_)[action].execution_error_info << ": " <<
         parser::pddl::toString((*action_map_)[action].durative_action_info->at_start_requirements));
-
+    
+    check_failed_counter_++;
+    if(check_failed_counter_ > MAX_FAILED_CHECKS)
+      return BT::NodeStatus::FAILURE;
+      
     return BT::NodeStatus::RUNNING;
   }
 
@@ -67,7 +73,11 @@ WaitAtStartReq::tick()
       node->get_logger(),
       "[" << action << "]" << (*action_map_)[action].execution_error_info << ": " <<
         parser::pddl::toString((*action_map_)[action].durative_action_info->over_all_requirements));
-
+    
+    check_failed_counter_++;
+    if(check_failed_counter_ > MAX_FAILED_CHECKS)
+      return BT::NodeStatus::FAILURE;
+      
     return BT::NodeStatus::RUNNING;
   }
 
