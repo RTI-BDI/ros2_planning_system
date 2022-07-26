@@ -134,6 +134,7 @@ ActionExecutorClient::action_hub_callback(const plansys2_msgs::msg::ActionExecut
       {
         current_arguments_ = msg->arguments;
         executing_plan_index_ = msg->executing_plan_index;
+        planned_start_time_ = msg->planned_start_time;
         trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
         commited_ = false;
       }
@@ -197,6 +198,7 @@ ActionExecutorClient::send_response(
   msg_resp.type = plansys2_msgs::msg::ActionExecution::RESPONSE;
   msg_resp.node_id = get_name();
   msg_resp.executing_plan_index = executing_plan_index_;
+  msg_resp.planned_start_time = planned_start_time_;
 
   action_hub_pub_->publish(msg_resp);
 }
@@ -212,6 +214,7 @@ ActionExecutorClient::send_feedback(float completion, const std::string & status
   msg_resp.completion = completion;
   msg_resp.status = status;
   msg_resp.executing_plan_index = executing_plan_index_;
+  msg_resp.planned_start_time = planned_start_time_;
 
   action_hub_pub_->publish(msg_resp);
 }
@@ -232,6 +235,7 @@ ActionExecutorClient::finish(bool success, float completion, const std::string &
   msg_resp.status = status;
   msg_resp.success = success;
   msg_resp.executing_plan_index = executing_plan_index_;
+  msg_resp.planned_start_time = planned_start_time_;
 
   action_hub_pub_->publish(msg_resp);
 }

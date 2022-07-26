@@ -6,8 +6,8 @@ int16 FEEDBACK=5
 int16 FINISH=6
 int16 CANCEL=7
 
-int16  executing_plan_index
-
+int16   executing_plan_index
+float32 planned_start_time
 int16 type
 string node_id
 

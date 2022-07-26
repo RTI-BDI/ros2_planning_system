@@ -52,6 +52,7 @@ protected:
 
   const std::vector<std::string> & get_arguments() const {return current_arguments_;}
   int16_t get_executing_plan_index() const {return executing_plan_index_;} 
+  float get_planned_start_time() const {return planned_start_time_;} 
   const std::string get_action_name() const {return action_managed_;}
 
   using CallbackReturnT =
@@ -75,6 +76,7 @@ protected:
   std::vector<std::string> specialized_arguments_;
 
   int16_t executing_plan_index_;
+  float planned_start_time_;
 
   rclcpp_lifecycle::LifecyclePublisher<plansys2_msgs::msg::ActionExecution>::SharedPtr
     action_hub_pub_;

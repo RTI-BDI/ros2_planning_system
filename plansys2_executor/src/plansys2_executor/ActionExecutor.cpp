@@ -29,8 +29,9 @@ using namespace std::chrono_literals;
 ActionExecutor::ActionExecutor(
   const std::string & action,
   rclcpp_lifecycle::LifecycleNode::SharedPtr node,
-  const int16_t& plan_index)
-: node_(node), state_(IDLE), completion_(0.0), plan_index_(plan_index)
+  const int16_t& plan_index,
+  const float& planned_start_time)
+: node_(node), state_(IDLE), completion_(0.0), plan_index_(plan_index), planned_start_time_(planned_start_time)
 {
   action_hub_pub_ = node_->create_publisher<plansys2_msgs::msg::ActionExecution>(
     "actions_hub", rclcpp::QoS(100).reliable());
@@ -121,6 +122,7 @@ ActionExecutor::confirm_performer(const std::string & node_id)
   msg.action = action_name_;
   msg.arguments = action_params_;
   msg.executing_plan_index = plan_index_;
+  msg.planned_start_time = planned_start_time_;
 
   action_hub_pub_->publish(msg);
 }
@@ -134,6 +136,7 @@ ActionExecutor::reject_performer(const std::string & node_id)
   msg.action = action_name_;
   msg.arguments = action_params_;
   msg.executing_plan_index = plan_index_;
+  msg.planned_start_time = planned_start_time_;
 
   action_hub_pub_->publish(msg);
 }
@@ -147,6 +150,7 @@ ActionExecutor::request_for_performers()
   msg.action = action_name_;
   msg.arguments = action_params_;
   msg.executing_plan_index = plan_index_;
+  msg.planned_start_time = planned_start_time_;
 
   action_hub_pub_->publish(msg);
 }
@@ -232,6 +236,7 @@ ActionExecutor::cancel()
   msg.action = action_name_;
   msg.arguments = action_params_;
   msg.executing_plan_index = plan_index_;
+  msg.planned_start_time = planned_start_time_;
 
   action_hub_pub_->publish(msg);
 }
