@@ -46,13 +46,13 @@ public:
   using Ptr = std::shared_ptr<ActionExecutor>;
   static Ptr make_shared(
     const std::string & action,
-    rclcpp_lifecycle::LifecycleNode::SharedPtr node)
+    rclcpp_lifecycle::LifecycleNode::SharedPtr node, const int16_t& plan_index = 0)
   {
-    return std::make_shared<ActionExecutor>(action, node);
+    return std::make_shared<ActionExecutor>(action, node, plan_index);
   }
 
   explicit ActionExecutor(
-    const std::string & action, rclcpp_lifecycle::LifecycleNode::SharedPtr node);
+    const std::string & action, rclcpp_lifecycle::LifecycleNode::SharedPtr node, const int16_t& plan_index);
 
   BT::NodeStatus tick(const rclcpp::Time & now);
   void cancel();
@@ -86,6 +86,8 @@ protected:
 
   std::string feedback_;
   float completion_;
+
+  int16_t plan_index_;
 
   rclcpp_lifecycle::LifecyclePublisher<plansys2_msgs::msg::ActionExecution>::SharedPtr
     action_hub_pub_;

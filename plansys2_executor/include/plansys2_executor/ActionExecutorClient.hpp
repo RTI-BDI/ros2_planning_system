@@ -51,6 +51,7 @@ protected:
   virtual void do_work() {}
 
   const std::vector<std::string> & get_arguments() const {return current_arguments_;}
+  int16_t get_executing_plan_index() const {return executing_plan_index_;} 
   const std::string get_action_name() const {return action_managed_;}
 
   using CallbackReturnT =
@@ -72,6 +73,8 @@ protected:
 
   std::vector<std::string> current_arguments_;
   std::vector<std::string> specialized_arguments_;
+
+  int16_t executing_plan_index_;
 
   rclcpp_lifecycle::LifecyclePublisher<plansys2_msgs::msg::ActionExecution>::SharedPtr
     action_hub_pub_;

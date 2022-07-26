@@ -334,7 +334,7 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
 
     (*action_map)[index] = ActionExecutionInfo();
     (*action_map)[index].action_executor =
-      ActionExecutor::make_shared(plan_item.action, shared_from_this());
+      ActionExecutor::make_shared(plan_item.action, shared_from_this(), (current_plan_.value().plan_index));
     (*action_map)[index].durative_action_info =
       domain_client_->getDurativeAction(
       get_action_name(plan_item.action), get_action_params(plan_item.action));
