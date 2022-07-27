@@ -22,6 +22,7 @@
 
 #include "plansys2_msgs/action/execute_plan.hpp"
 #include "plansys2_msgs/srv/get_ordered_sub_goals.hpp"
+#include "plansys2_msgs/srv/early_arrest_request.hpp"
 #include "plansys2_msgs/srv/get_plan.hpp"
 #include "plansys2_msgs/msg/plan.hpp"
 #include "plansys2_msgs/msg/tree.hpp"
@@ -38,12 +39,12 @@ public:
   using ExecutePlan = plansys2_msgs::action::ExecutePlan;
   using GoalHandleExecutePlan = rclcpp_action::ClientGoalHandle<ExecutePlan>;
 
-  ExecutorClient();
-  explicit ExecutorClient(const std::string & node_name);
+  explicit ExecutorClient(const std::string & node_name="executor_client");
 
   bool start_plan_execution(const plansys2_msgs::msg::Plan & plan);
   bool execute_and_check_plan();
   void cancel_plan_execution();
+  bool stop_plan_execution_at(const std::string& action_fullname);
   std::vector<plansys2_msgs::msg::Tree> getOrderedSubGoals();
   std::optional<plansys2_msgs::msg::Plan> getPlan();
 
@@ -62,6 +63,9 @@ private:
     get_ordered_sub_goals_client_;
   rclcpp::Client<plansys2_msgs::srv::GetPlan>::SharedPtr get_plan_client_;
 
+  rclcpp::Client<plansys2_msgs::srv::EarlyArrestRequest>::SharedPtr
+    early_arrest_request_client_;
+
   ExecutePlan::Feedback feedback_;
   rclcpp_action::ClientGoalHandle<ExecutePlan>::SharedPtr goal_handle_;
   rclcpp_action::ClientGoalHandle<ExecutePlan>::WrappedResult result_;
@@ -69,7 +73,7 @@ private:
   bool goal_result_available_{false};
 
   bool executing_plan_{false};
-
+  
   void result_callback(const GoalHandleExecutePlan::WrappedResult & result);
   void feedback_callback(
     GoalHandleExecutePlan::SharedPtr goal_handle,

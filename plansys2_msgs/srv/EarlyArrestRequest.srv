@@ -1,0 +1,7 @@
+# Deal with the desire of interrupting successfully a plan at an intermediate step, 
+# i.e. just after the apply at end effect of action_fullname (or in any case before the at start effect of the 
+# following action(s) waiting for it)
+
+string action_fullname
+---
+bool accepted

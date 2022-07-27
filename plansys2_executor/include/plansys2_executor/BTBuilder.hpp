@@ -36,6 +36,8 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 
+#define WRAP_SEQUENCE_PREFIX "StartingWith_"
+
 namespace plansys2
 {
 

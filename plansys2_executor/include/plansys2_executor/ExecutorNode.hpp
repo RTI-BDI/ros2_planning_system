@@ -31,6 +31,7 @@
 #include "plansys2_msgs/action/execute_plan.hpp"
 #include "plansys2_msgs/msg/action_execution_info.hpp"
 #include "plansys2_msgs/srv/get_ordered_sub_goals.hpp"
+#include "plansys2_msgs/srv/early_arrest_request.hpp"
 #include "plansys2_msgs/msg/plan.hpp"
 #include "std_msgs/msg/string.hpp"
 
@@ -69,16 +70,40 @@ public:
     const std::shared_ptr<plansys2_msgs::srv::GetOrderedSubGoals::Request> request,
     const std::shared_ptr<plansys2_msgs::srv::GetOrderedSubGoals::Response> response);
 
+  void early_arrest_request_service_callback(
+    const std::shared_ptr<rmw_request_id_t> request_header,
+    const std::shared_ptr<plansys2_msgs::srv::EarlyArrestRequest::Request> request,
+    const std::shared_ptr<plansys2_msgs::srv::EarlyArrestRequest::Response> response);
+
   void get_plan_service_callback(
     const std::shared_ptr<rmw_request_id_t> request_header,
     const std::shared_ptr<plansys2_msgs::srv::GetPlan::Request> request,
     const std::shared_ptr<plansys2_msgs::srv::GetPlan::Response> response);
 
 protected:
+
+  /* Returns number of currently running actions*/
+  int open_actions();
+
+  /* Returns true if action is within current plan to be executed and has already been executed*/
+  bool already_executed(const std::string& action_fullname);
+
+  /* Reset plan execution data*/
+  void reset_plan_exec_data()
+  {
+    current_plan_ = {};
+    tree_ = BT::Tree{};
+    stop_after_action_ = "";
+    cancel_plan_requested_ = false;
+  }
+
   rclcpp::Node::SharedPtr node_;
   rclcpp::Node::SharedPtr aux_node_;
 
+  BT::Tree tree_;
+
   bool cancel_plan_requested_;
+  std::string stop_after_action_;
   std::optional<plansys2_msgs::msg::Plan> current_plan_;
   std::optional<std::vector<plansys2_msgs::msg::Tree>> ordered_sub_goals_;
 
@@ -102,6 +127,9 @@ protected:
   rclcpp::Service<plansys2_msgs::srv::GetPlan>::SharedPtr get_plan_service_;
 
   std::map<std::string, std::vector<std::string>> actions_waiting_map_;
+
+  rclcpp::Service<plansys2_msgs::srv::EarlyArrestRequest>::SharedPtr
+    early_arrest_request_service_;
 
   rclcpp_action::GoalResponse handle_goal(
     const rclcpp_action::GoalUUID & uuid,

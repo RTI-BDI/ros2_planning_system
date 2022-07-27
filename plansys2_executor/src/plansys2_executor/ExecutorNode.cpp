@@ -93,6 +93,13 @@ ExecutorNode::ExecutorNode()
     std::bind(&ExecutorNode::handle_cancel, this, _1),
     std::bind(&ExecutorNode::handle_accepted, this, _1));
 
+  early_arrest_request_service_ = create_service<plansys2_msgs::srv::EarlyArrestRequest>(
+    "executor/early_arrest",
+    std::bind(
+      &ExecutorNode::early_arrest_request_service_callback,
+      this, std::placeholders::_1, std::placeholders::_2,
+      std::placeholders::_3));
+
   get_ordered_sub_goals_service_ = create_service<plansys2_msgs::srv::GetOrderedSubGoals>(
     "executor/get_ordered_sub_goals",
     std::bind(
@@ -217,6 +224,45 @@ ExecutorNode::get_ordered_sub_goals_service_callback(
   }
 }
 
+bool ExecutorNode::already_executed(const std::string& action_fullname)
+{
+  for(auto btnode : tree_.nodes)
+    if(btnode->registrationName() == "Sequence" && btnode->name() == action_fullname)
+      return btnode->status() == BT::NodeStatus::SUCCESS;//return success 
+
+  return false;
+}
+
+
+void ExecutorNode::early_arrest_request_service_callback(
+    const std::shared_ptr<rmw_request_id_t> request_header,
+    const std::shared_ptr<plansys2_msgs::srv::EarlyArrestRequest::Request> request,
+    const std::shared_ptr<plansys2_msgs::srv::EarlyArrestRequest::Response> response)
+{
+  if(current_plan_.has_value() && !cancel_plan_requested_)
+  {
+    stop_after_action_ = "";
+
+    for(auto a : current_plan_.value().items)
+    {
+      if((a.action+":"+std::to_string(static_cast<int>(a.time * 1000))) == request->action_fullname)
+      {
+        if(!already_executed(request->action_fullname))//accept request iff action not already completed
+          stop_after_action_ = request->action_fullname;
+        
+        break;
+      }
+    }
+    response->accepted = stop_after_action_.length() > 0;
+  }
+  else
+  {
+    //either no plan running anymore or cancel plan arleady requested
+    response->accepted = false;
+  }
+
+}
+
 std::optional<std::vector<plansys2_msgs::msg::Tree>>
 ExecutorNode::getOrderedSubGoals()
 {
@@ -287,7 +333,7 @@ ExecutorNode::handle_goal(
 {
   RCLCPP_DEBUG(this->get_logger(), "Received goal request with order");
 
-  current_plan_ = {};
+  reset_plan_exec_data();
   ordered_sub_goals_ = {};
 
   return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
@@ -298,10 +344,27 @@ ExecutorNode::handle_cancel(
   const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
 {
   RCLCPP_DEBUG(this->get_logger(), "Received request to cancel goal");
-
   cancel_plan_requested_ = true;
 
   return rclcpp_action::CancelResponse::ACCEPT;
+}
+
+int ExecutorNode::open_actions()
+{
+  int counter = 0;
+  for(auto btnode : tree_.nodes)
+  {
+    if(btnode->registrationName() == "Sequence" && btnode->name().find(WRAP_SEQUENCE_PREFIX) == std::string::npos)
+      counter += (btnode->status() == BT::NodeStatus::RUNNING)? 1:0;
+    if(stop_after_action_ != "" && btnode->registrationName() == "WaitAction" && btnode->status() == BT::NodeStatus::RUNNING)
+    {
+      std::string waiting;
+      btnode->getInput("action", waiting);
+      if(waiting == stop_after_action_)
+        counter--;//decrease counter to not take into account waiting action which has not been started 
+    }
+  }
+  return counter;
 }
 
 void
@@ -310,8 +373,7 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
   auto feedback = std::make_shared<ExecutePlan::Feedback>();
   auto result = std::make_shared<ExecutePlan::Result>();
 
-  cancel_plan_requested_ = false;
-
+  reset_plan_exec_data();
   current_plan_ = goal_handle->get_goal()->plan;
 
   if (!current_plan_.has_value()) {
@@ -387,9 +449,16 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
   out << bt_xml_tree;
   out.close();
 
-  auto tree = factory.createTreeFromText(bt_xml_tree, blackboard);
+  tree_ = factory.createTreeFromText(bt_xml_tree, blackboard);
   
-  actions_waiting_map_ = build_actions_waiting_map(tree);
+  // Set in WaitAction node reference to early stop action string such that they know whether to stop advancement
+  // in case of an earlier stop requested (e.g. if b->c, therefore in c WaitAction for b and early stop in b is 
+  // requested WaitAction for b in c does not grant any futher progress)
+  for(auto tnode : tree_.nodes)
+    if(tnode->name() == "WaitAction")
+      (dynamic_cast<plansys2::WaitAction&>(*tnode)).setEarlyStopActionNamePtr(&stop_after_action_);
+
+  actions_waiting_map_ = build_actions_waiting_map(tree_);
 
 #ifdef ZMQ_FOUND
   unsigned int publisher_port = this->get_parameter("publisher_port").as_int();
@@ -405,7 +474,7 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
     try {
       publisher_zmq.reset(
         new BT::PublisherZMQ(
-          tree, max_msgs_per_second, publisher_port,
+          tree_, max_msgs_per_second, publisher_port,
           server_port));
     } catch (const BT::LogicError & exc) {
       RCLCPP_ERROR(get_logger(), "ZMQ error: %s", exc.what());
@@ -428,10 +497,24 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
 
   while (status == BT::NodeStatus::RUNNING && !cancel_plan_requested_) {
     try {
-      status = tree.tickRoot();
+      status = tree_.tickRoot();
+      if(stop_after_action_ != "")
+      {
+        for(auto btnode : tree_.nodes)
+          if(btnode->registrationName() == "Sequence" && btnode->name() == stop_after_action_ && btnode->status() == BT::NodeStatus::SUCCESS)
+          {
+            if(open_actions()==0)//wait for all open actions to terminate here (all actions node in tree_ stucked in WaitAction, IDLE or SUCCESS)
+            {
+              cancel_plan_requested_ = true;
+              status = BT::NodeStatus::SUCCESS;//still managed to arrive with success to "earlier" target
+            }
+            //std::cout << "running actions " << open_actions() << std::flush << std::endl;
+          }  
+      }
+
     } catch (std::exception & e) {
       std::cerr << e.what() << std::endl;
-      status == BT::NodeStatus::FAILURE;
+      status = BT::NodeStatus::FAILURE;
     }
 
     feedback->action_execution_status = get_feedback_info(action_map);
@@ -443,15 +526,16 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
         "enable_dotgraph_legend").as_bool());
     dotgraph_pub_->publish(dotgraph_msg);
 
-    rate.sleep();
+    if(!cancel_plan_requested_)
+      rate.sleep();
   }
 
   if (cancel_plan_requested_) {
-    tree.haltTree();
+    tree_.haltTree();
   }
 
   if (status == BT::NodeStatus::FAILURE) {
-    tree.haltTree();
+    tree_.haltTree();
     RCLCPP_ERROR(get_logger(), "Executor BT finished with FAILURE state");
   }
 
@@ -465,14 +549,16 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
   result->action_execution_status = get_feedback_info(action_map);
 
   size_t i = 0;
-  while (i < result->action_execution_status.size() && result->success) {
-    if (result->action_execution_status[i].status !=
-      plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED)
+  while (i < result->action_execution_status.size() && result->success){
+    if (result->action_execution_status[i].status == plansys2_msgs::msg::ActionExecutionInfo::FAILED)
     {
       result->success = false;
     }
     i++;
   }
+
+  // reset current plan info
+  reset_plan_exec_data();
 
   if (rclcpp::ok()) {
     goal_handle->succeed(result);
@@ -487,7 +573,6 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
 std::map<std::string, std::vector<std::string>> ExecutorNode::build_actions_waiting_map(const BT::Tree& tree)
 {
   std::map<std::string, std::vector<std::string>> actions_waiting_map;
-  //std::cout<< "\n\n\n\nNODE TYPE OF BTTREE:\n"; 
   std::string block_bt_da;
   for(auto tnode : tree.nodes){
     if(tnode->name().find_first_of('(') != std::string::npos && 
@@ -495,31 +580,16 @@ std::map<std::string, std::vector<std::string>> ExecutorNode::build_actions_wait
         tnode->name().find_first_of(':') != std::string::npos)
     {
       if(tnode->name() != block_bt_da)
-        block_bt_da = tnode->name();
+        block_bt_da = tnode->name();//new sequence block in which you're considering actions for block_bt_da
     }
 
     std::string waiting = "";
     if(tnode->name() == "WaitAction")
     {
       tnode->getInput("action", waiting);
-      // if(action_waiting_map.find(block_bt_da) == action_waiting_map.end())
-      //   action_waiting_map.insert(std::pair<std::string, std::vector<std::string>>(block_bt_da, std::vector<std::string>()));
-      // action_waiting_map.find(block_bt_da)->second.push_back(waiting);
-      actions_waiting_map[block_bt_da].push_back(waiting);
-      // std::cout << "Action " << block_bt_da << " has to wait for " << waiting << std::endl;
+      actions_waiting_map[block_bt_da].push_back(waiting);//action to be waited for block_bt_da
     }
-    
-    //std::cout << tnode->UID() << "[" + block_bt_da + "]: " << tnode->name() << "\t" << tnode->type() << "\twaiting=" << waiting << std::endl;
   }
-
-  // std::cout << "\n\nDevis è un genio umile e caritatevole: \n";
-  // for(auto entry : action_waiting_map)
-  // {
-  //   std::cout << entry.first << " (waiting for " + std::to_string(action_waiting_map[entry.first].size()) + " actions): ";
-  //   for(auto entry_value : action_waiting_map[entry.first])
-  //     std::cout << "\t" << entry_value << " ";
-  //   std::cout << std::endl << std::endl;
-  // }
 
   return actions_waiting_map;
 }

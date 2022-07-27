@@ -47,8 +47,11 @@ public:
       });
   }
 
+  void setEarlyStopActionNamePtr(std::string* name){early_stop_action_fullname_ = name;}
+
 private:
   std::shared_ptr<std::map<std::string, ActionExecutionInfo>> action_map_;
+  std::string* early_stop_action_fullname_;
 };
 
 }  // namespace plansys2

@@ -588,7 +588,7 @@ BTBuilder::get_flow_tree(
   if (node->out_arcs.size() == 0) {
     ret = ret + execution_block(node, l);
   } else if (node->out_arcs.size() == 1) {
-    ret = ret + t(l) + "<Sequence name=\"" + action_id + "\">\n";
+    ret = ret + t(l) + "<Sequence name=\"" + WRAP_SEQUENCE_PREFIX + action_id + "\">\n";
     ret = ret + execution_block(node, l + 1);
 
     for (const auto & child_node : node->out_arcs) {
@@ -597,7 +597,7 @@ BTBuilder::get_flow_tree(
 
     ret = ret + t(l) + "</Sequence>\n";
   } else {
-    ret = ret + t(l) + "<Sequence name=\"" + action_id + "\">\n";
+    ret = ret + t(l) + "<Sequence name=\"" + WRAP_SEQUENCE_PREFIX + action_id + "\">\n";
     ret = ret + execution_block(node, l + 1);
 
     ret = ret + t(l + 1) +

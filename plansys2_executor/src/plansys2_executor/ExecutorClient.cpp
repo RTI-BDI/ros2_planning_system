@@ -29,17 +29,6 @@ using namespace std::placeholders;
 
 using ExecutePlan = plansys2_msgs::action::ExecutePlan;
 
-ExecutorClient::ExecutorClient()
-{
-  node_ = rclcpp::Node::make_shared("executor_client");
-
-  createActionClient();
-
-  get_ordered_sub_goals_client_ = node_->create_client<plansys2_msgs::srv::GetOrderedSubGoals>(
-    "executor/get_ordered_sub_goals");
-  get_plan_client_ = node_->create_client<plansys2_msgs::srv::GetPlan>("executor/get_plan");
-}
-
 ExecutorClient::ExecutorClient(const std::string & node_name)
 {
   node_ = rclcpp::Node::make_shared(node_name);
@@ -49,6 +38,8 @@ ExecutorClient::ExecutorClient(const std::string & node_name)
   get_ordered_sub_goals_client_ = node_->create_client<plansys2_msgs::srv::GetOrderedSubGoals>(
     "executor/get_ordered_sub_goals");
   get_plan_client_ = node_->create_client<plansys2_msgs::srv::GetPlan>("executor/get_plan");
+
+  early_arrest_request_client_ = node_->create_client<plansys2_msgs::srv::EarlyArrestRequest>("executor/early_arrest");
 }
 
 void
@@ -225,6 +216,34 @@ ExecutorClient::cancel_plan_execution()
 
   executing_plan_ = false;
   goal_result_available_ = false;
+}
+
+bool
+ExecutorClient::stop_plan_execution_at(const std::string& action_fullname)
+{
+
+  while (!early_arrest_request_client_->wait_for_service(std::chrono::seconds(5))) {
+    if (!rclcpp::ok()) {
+      return false;
+    }
+    RCLCPP_ERROR_STREAM(
+      node_->get_logger(),
+      early_arrest_request_client_->get_service_name() <<
+        " service  client: waiting for service to appear...");
+  }
+
+  auto request = std::make_shared<plansys2_msgs::srv::EarlyArrestRequest::Request>();
+  request->action_fullname = action_fullname;
+  auto future_result = early_arrest_request_client_->async_send_request(request);
+
+  if (rclcpp::spin_until_future_complete(node_, future_result, std::chrono::seconds(1)) !=
+    rclcpp::FutureReturnCode::SUCCESS)
+  {
+    return false;
+  }
+
+  auto result = *future_result.get();
+  return result.accepted;
 }
 
 std::vector<plansys2_msgs::msg::Tree> ExecutorClient::getOrderedSubGoals()
