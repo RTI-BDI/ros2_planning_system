@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 
+#define FULFILLMENT_PREFIX "f_"
+
 namespace plansys2
 {
 
@@ -49,6 +51,7 @@ protected:
   std::string get_types(const std::string & domain);
   std::string get_constants(const std::string & domain);
   std::string get_predicates(const std::string & domain);
+  std::string get_fulfillment_predicates(const std::string & predicates);
   std::string get_functions(const std::string & domain);
   std::vector<std::string> get_actions(const std::string & domain);
 

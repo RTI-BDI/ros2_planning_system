@@ -508,8 +508,7 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
               cancel_plan_requested_ = true;
               status = BT::NodeStatus::SUCCESS;//still managed to arrive with success to "earlier" target
             }
-            //std::cout << "running actions " << open_actions() << std::flush << std::endl;
-          }  
+          }
       }
 
     } catch (std::exception & e) {

@@ -53,6 +53,7 @@ DomainReader::add_domain(const std::string & domain)
   new_domain.types = get_types(lc_domain);
   new_domain.constants = get_constants(lc_domain);
   new_domain.predicates = get_predicates(lc_domain);
+  new_domain.predicates += get_fulfillment_predicates(new_domain.predicates);
   new_domain.functions = get_functions(lc_domain);
   new_domain.actions = get_actions(lc_domain);
 
@@ -270,6 +271,37 @@ DomainReader::get_predicates(const std::string & domain)
   } else {
     return "";
   }
+}
+
+/*
+  Iterate over base predicates already readed from domain file
+  and return a string containing them with a prefix
+*/
+std::string 
+DomainReader::get_fulfillment_predicates(const std::string & predicates)
+{
+  std::string fulfillment_predicates = "";
+  bool parsingPredicate = false;
+
+  for(int i = 0; i<predicates.length(); i++)
+  {
+    // start parsing new predicate
+    if(predicates[i] == '(')
+    {
+      parsingPredicate = true;
+      fulfillment_predicates += "\n(" + std::string(FULFILLMENT_PREFIX); //add "(+prefix"
+      while(i<predicates.length() && !isalpha(predicates[i])){i++;}
+    }
+    
+    if(parsingPredicate)
+      fulfillment_predicates += predicates[i];  
+    
+    // end parsing predicate
+    if(predicates[i] == ')')
+      parsingPredicate = false;
+  }
+  
+  return fulfillment_predicates;
 }
 
 std::string
