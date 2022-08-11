@@ -81,19 +81,30 @@ public:
     const std::shared_ptr<plansys2_msgs::srv::GetPlan::Response> response);
 
 protected:
+  /* Returns true if the two plans are a perfect match*/
+  static bool plan_items_match(const plansys2_msgs::msg::Plan& p1, const plansys2_msgs::msg::Plan& p2, const bool& consider_committed = false);
 
-  /* Returns number of currently running actions*/
-  int open_actions();
+  /* Find PlanItem in plan matching action_full_name, if not found returns default built msg*/
+  static int find_plan_item(const std::string& action_full_name, const plansys2_msgs::msg::Plan& plan); 
+
+
+  /* Returns true if all waiting actions for a_fullname are committed in Plan msg*/
+  bool all_waiting_actions_committed(std::string a_fullname, const plansys2_msgs::msg::Plan& plan);
+
+  /* Count number of currently committed actions in current_plan_*/
+  int count_committed_actions();
+
+  /* Returns number of succesfully executed actions, in currently running plan*/
+  int executed_actions();
 
   /* Returns true if action is within current plan to be executed and has already been executed*/
-  bool already_executed(const std::string& action_fullname);
+  bool already_executed_or_executing(const std::string& action_fullname);
 
   /* Reset plan execution data*/
   void reset_plan_exec_data()
   {
     current_plan_ = {};
     tree_ = BT::Tree{};
-    stop_after_action_ = "";
     cancel_plan_requested_ = false;
   }
 
@@ -103,7 +114,6 @@ protected:
   BT::Tree tree_;
 
   bool cancel_plan_requested_;
-  std::string stop_after_action_;
   std::optional<plansys2_msgs::msg::Plan> current_plan_;
   std::optional<std::vector<plansys2_msgs::msg::Tree>> ordered_sub_goals_;
 

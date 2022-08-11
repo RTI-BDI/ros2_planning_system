@@ -219,7 +219,7 @@ ExecutorClient::cancel_plan_execution()
 }
 
 bool
-ExecutorClient::stop_plan_execution_at(const std::string& action_fullname)
+ExecutorClient::stop_plan_execution_at(const plansys2_msgs::msg::Plan & plan)
 {
 
   while (!early_arrest_request_client_->wait_for_service(std::chrono::seconds(5))) {
@@ -233,7 +233,7 @@ ExecutorClient::stop_plan_execution_at(const std::string& action_fullname)
   }
 
   auto request = std::make_shared<plansys2_msgs::srv::EarlyArrestRequest::Request>();
-  request->action_fullname = action_fullname;
+  request->committed_plan = plan;
   auto future_result = early_arrest_request_client_->async_send_request(request);
 
   if (rclcpp::spin_until_future_complete(node_, future_result, std::chrono::seconds(1)) !=

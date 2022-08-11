@@ -24,6 +24,8 @@
 
 #include "plansys2_executor/ActionExecutor.hpp"
 
+#include "plansys2_msgs/msg/plan_item.hpp"
+
 #include "plansys2_executor/behavior_tree/execute_action_node.hpp"
 
 namespace plansys2
@@ -46,12 +48,12 @@ public:
         BT::InputPort<std::string>("action", "Action to be executed"),
       });
   }
-
-  void setEarlyStopActionNamePtr(std::string* name){early_stop_action_fullname_ = name;}
+  
+  void setCorrespondingPlanItemPtr(plansys2_msgs::msg::PlanItem* pi_ptr){corresponding_plan_item_ = pi_ptr;}
 
 private:
   std::shared_ptr<std::map<std::string, ActionExecutionInfo>> action_map_;
-  std::string* early_stop_action_fullname_;
+  plansys2_msgs::msg::PlanItem* corresponding_plan_item_;
 };
 
 }  // namespace plansys2

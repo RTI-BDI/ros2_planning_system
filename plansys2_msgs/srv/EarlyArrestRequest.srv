@@ -1,7 +1,7 @@
 # Deal with the desire of interrupting successfully a plan at an intermediate step, 
-# i.e. just after the apply at end effect of action_fullname (or in any case before the at start effect of the 
-# following action(s) waiting for it)
+# Mark the actions of the plan that should be executed as committed and execute a valid sequence of only them
+# If not a valid sequence, request won't be accepted
 
-string action_fullname
+Plan committed_plan
 ---
 bool accepted

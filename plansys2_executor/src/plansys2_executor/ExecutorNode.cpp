@@ -31,6 +31,7 @@
 
 #include "lifecycle_msgs/msg/state.hpp"
 #include "plansys2_msgs/msg/action_execution_info.hpp"
+#include "plansys2_msgs/msg/plan_item.hpp"
 #include "plansys2_msgs/msg/plan.hpp"
 
 #include "ament_index_cpp/get_package_share_directory.hpp"
@@ -52,6 +53,8 @@
 #include "plansys2_executor/behavior_tree/check_timeout_node.hpp"
 #include "plansys2_executor/behavior_tree/apply_atstart_effect_node.hpp"
 #include "plansys2_executor/behavior_tree/apply_atend_effect_node.hpp"
+
+using plansys2_msgs::msg::PlanItem;
 
 namespace plansys2
 {
@@ -209,6 +212,31 @@ ExecutorNode::on_error(const rclcpp_lifecycle::State & state)
   return CallbackReturnT::SUCCESS;
 }
 
+int ExecutorNode::find_plan_item(const std::string& action_full_name, const plansys2_msgs::msg::Plan& plan)
+{
+  for(int i  = 0; i < plan.items.size(); i++)
+    if(action_full_name == (plan.items[i].action+":"+std::to_string(static_cast<int>(plan.items[i].time * 1000))))
+      return i;
+
+  return -1;
+}
+
+bool ExecutorNode::plan_items_match(const plansys2_msgs::msg::Plan& p1, const plansys2_msgs::msg::Plan& p2, const bool& consider_committed)
+{
+
+  if(p1.items.size() != p2.items.size())
+    return false;
+
+  for(int i = 0; i < p1.items.size(); i++)
+  {
+    if(p1.items[i].action != p2.items[i].action || p1.items[i].time != p2.items[i].time || p1.items[i].duration != p2.items[i].duration)
+      return false;
+    else if(consider_committed && p1.items[i].committed != p2.items[i].committed)
+      return false;
+  }
+  return true;
+}
+
 void
 ExecutorNode::get_ordered_sub_goals_service_callback(
   const std::shared_ptr<rmw_request_id_t> request_header,
@@ -224,11 +252,11 @@ ExecutorNode::get_ordered_sub_goals_service_callback(
   }
 }
 
-bool ExecutorNode::already_executed(const std::string& action_fullname)
+bool ExecutorNode::already_executed_or_executing(const std::string& action_fullname)
 {
   for(auto btnode : tree_.nodes)
     if(btnode->registrationName() == "Sequence" && btnode->name() == action_fullname)
-      return btnode->status() == BT::NodeStatus::SUCCESS;//return success 
+      return btnode->status() == BT::NodeStatus::SUCCESS || btnode->status() == BT::NodeStatus::RUNNING;//return success 
 
   return false;
 }
@@ -239,28 +267,52 @@ void ExecutorNode::early_arrest_request_service_callback(
     const std::shared_ptr<plansys2_msgs::srv::EarlyArrestRequest::Request> request,
     const std::shared_ptr<plansys2_msgs::srv::EarlyArrestRequest::Response> response)
 {
-  if(current_plan_.has_value() && !cancel_plan_requested_)
+  
+  bool accept_request = false;
+  if(current_plan_.has_value() && ExecutorNode::plan_items_match(current_plan_.value(), request->committed_plan) && !cancel_plan_requested_)
   {
-    stop_after_action_ = "";
-
-    for(auto a : current_plan_.value().items)
+    accept_request = true;
+    for(int i = 0; i<request->committed_plan.items.size() && accept_request; i++)
     {
-      if((a.action+":"+std::to_string(static_cast<int>(a.time * 1000))) == request->action_fullname)
-      {
-        if(!already_executed(request->action_fullname))//accept request iff action not already completed
-          stop_after_action_ = request->action_fullname;
+      PlanItem pi = request->committed_plan.items[i];
+      std::string a_fullname = (pi.action+":"+std::to_string(static_cast<int>(pi.time * 1000)));
+      
+      if(pi.committed && !all_waiting_actions_committed(a_fullname, request->committed_plan))
+        accept_request = false; // A COMMITTED, but invalid request
         
-        break;
+      else if(!pi.committed)
+      {
+        // A NOT COMMITTED
+        if(already_executed_or_executing(a_fullname))//deny request iff action already executed or
+          accept_request = false;
+        
       }
     }
-    response->accepted = stop_after_action_.length() > 0;
-  }
-  else
-  {
-    //either no plan running anymore or cancel plan arleady requested
-    response->accepted = false;
+    
+    if(accept_request)
+    {
+      //mark not committed actions as such
+      for(int i = 0; i<current_plan_.value().items.size(); i++)
+        current_plan_.value().items[i].committed = request->committed_plan.items[i].committed;
+    }
   }
 
+  response->accepted = accept_request; // request denied if either no plan running anymore or cancel plan already requested OR two plan items sequence do not correspond
+
+}
+
+
+
+bool ExecutorNode::all_waiting_actions_committed(std::string a_fullname, const plansys2_msgs::msg::Plan& plan)
+{
+  if(actions_waiting_map_.count(a_fullname) == 1)
+  {
+    for(std::string waiting_action : actions_waiting_map_[a_fullname])
+      for(PlanItem pi : plan.items)
+        if(waiting_action == (pi.action+":"+std::to_string(static_cast<int>(pi.time * 1000))) && !pi.committed)
+          return false;
+  }
+  return true;
 }
 
 std::optional<std::vector<plansys2_msgs::msg::Tree>>
@@ -349,21 +401,23 @@ ExecutorNode::handle_cancel(
   return rclcpp_action::CancelResponse::ACCEPT;
 }
 
-int ExecutorNode::open_actions()
+int ExecutorNode::executed_actions()
 {
   int counter = 0;
   for(auto btnode : tree_.nodes)
-  {
     if(btnode->registrationName() == "Sequence" && btnode->name().find(WRAP_SEQUENCE_PREFIX) == std::string::npos)
-      counter += (btnode->status() == BT::NodeStatus::RUNNING)? 1:0;
-    if(stop_after_action_ != "" && btnode->registrationName() == "WaitAction" && btnode->status() == BT::NodeStatus::RUNNING)
-    {
-      std::string waiting;
-      btnode->getInput("action", waiting);
-      if(waiting == stop_after_action_)
-        counter--;//decrease counter to not take into account waiting action which has not been started 
-    }
-  }
+      counter +=  btnode->status() == BT::NodeStatus::SUCCESS? 1 : 0;//found an action successfully executed 
+
+  return counter;
+}
+
+int ExecutorNode::count_committed_actions()
+{
+  int counter = 0;
+  if(current_plan_.has_value())
+    for(PlanItem pi : current_plan_.value().items)
+      counter += pi.committed? 1 : 0;
+  
   return counter;
 }
 
@@ -385,6 +439,9 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
     executing_plan_pub_->publish(plansys2_msgs::msg::Plan());
     return;
   }
+
+  for(int i = 0; i < current_plan_.value().items.size(); i++)
+    current_plan_.value().items[i].committed = true;
 
   executing_plan_pub_->publish(current_plan_.value());
 
@@ -454,9 +511,26 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
   // Set in WaitAction node reference to early stop action string such that they know whether to stop advancement
   // in case of an earlier stop requested (e.g. if b->c, therefore in c WaitAction for b and early stop in b is 
   // requested WaitAction for b in c does not grant any futher progress)
-  for(auto tnode : tree_.nodes)
-    if(tnode->name() == "WaitAction")
-      (dynamic_cast<plansys2::WaitAction&>(*tnode)).setEarlyStopActionNamePtr(&stop_after_action_);
+  
+  std::string current_action_ = "";
+  for(auto btnode : tree_.nodes)
+  {
+    if(btnode->registrationName() == "Sequence" && btnode->name().find(WRAP_SEQUENCE_PREFIX) == std::string::npos)
+      current_action_ = btnode->name();
+    
+    if(btnode->registrationName() == "WaitAction")
+    {
+      if(current_plan_.has_value())
+      {
+        int pi_index = find_plan_item(current_action_, current_plan_.value());
+        if(pi_index >= 0)
+        {
+          PlanItem* pi = &(current_plan_.value().items[pi_index]);
+          (dynamic_cast<plansys2::WaitAction&>(*btnode)).setCorrespondingPlanItemPtr(pi);
+        }
+      }
+    }
+  }
 
   actions_waiting_map_ = build_actions_waiting_map(tree_);
 
@@ -486,7 +560,6 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
     1s, [this, &action_map]() {
       auto msgs = get_feedback_info(action_map);
       for (const auto & msg : msgs) {
-        // std::cout << "Feed: execute " << msg.action_full_name << ": " << msg.status << "c" << std::endl << std::endl << std::endl << std::flush;
         execution_info_pub_->publish(msg);
       }
     });
@@ -498,17 +571,16 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
   while (status == BT::NodeStatus::RUNNING && !cancel_plan_requested_) {
     try {
       status = tree_.tickRoot();
-      if(stop_after_action_ != "")
+
+      int committed_actions = count_committed_actions();
+      if(current_plan_.has_value() && current_plan_.value().items.size() > committed_actions)
       {
-        for(auto btnode : tree_.nodes)
-          if(btnode->registrationName() == "Sequence" && btnode->name() == stop_after_action_ && btnode->status() == BT::NodeStatus::SUCCESS)
-          {
-            if(open_actions()==0)//wait for all open actions to terminate here (all actions node in tree_ stucked in WaitAction, IDLE or SUCCESS)
-            {
-              cancel_plan_requested_ = true;
-              status = BT::NodeStatus::SUCCESS;//still managed to arrive with success to "earlier" target
-            }
-          }
+        //there has been an approved early request abortion
+        if(executed_actions()==committed_actions)//wait for all committed actions to successfully terminate
+        {
+          cancel_plan_requested_ = true;
+          status = BT::NodeStatus::SUCCESS;//still managed to arrive with success to "earlier" target
+        }
       }
 
     } catch (std::exception & e) {
@@ -548,12 +620,16 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
   result->action_execution_status = get_feedback_info(action_map);
 
   size_t i = 0;
-  while (i < result->action_execution_status.size() && result->success){
-    if (result->action_execution_status[i].status == plansys2_msgs::msg::ActionExecutionInfo::FAILED)
-    {
-      result->success = false;
+  if(current_plan_.has_value())
+  {
+    while (i < result->action_execution_status.size() && result->success){
+
+      int pi_index = find_plan_item(result->action_execution_status[i].action_full_name, current_plan_.value());
+      if (pi_index >=0 && current_plan_.value().items[pi_index].committed && 
+          result->action_execution_status[i].status != plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED)//all committed actions must have been successfully exec.
+        result->success = false;
+      i++;
     }
-    i++;
   }
 
   // reset current plan info
@@ -618,26 +694,20 @@ ExecutorNode::get_feedback_info(
       case ActionExecutor::IDLE:
       case ActionExecutor::DEALING:
         info.status = plansys2_msgs::msg::ActionExecutionInfo::NOT_EXECUTED;
-        //std::cout << action.first << ": IDLE or DEALING\tassigning" <<  plansys2_msgs::msg::ActionExecutionInfo::NOT_EXECUTED << "#" << info.status << std::flush << std::endl;
         break;
       case ActionExecutor::RUNNING:
         info.status = plansys2_msgs::msg::ActionExecutionInfo::EXECUTING;
-        //std::cout << action.first << ": RUNNING\tassigning" <<  plansys2_msgs::msg::ActionExecutionInfo::EXECUTING << "#" << info.status << std::flush << std::endl;
         break;
       case ActionExecutor::SUCCESS:
         info.status = plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED;
-        //std::cout << action.first << ": SUCCESS\tassigning" <<  plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED << "#" << info.status << std::flush << std::endl;
         break;
       case ActionExecutor::FAILURE:
         info.status = plansys2_msgs::msg::ActionExecutionInfo::FAILED;
-        //std::cout << action.first << ": FAILURE\tassigning" <<  plansys2_msgs::msg::ActionExecutionInfo::FAILED << "#" << info.status << std::flush << std::endl;
         break;
       case ActionExecutor::CANCELLED:
         info.status = plansys2_msgs::msg::ActionExecutionInfo::CANCELLED;
-        //std::cout << action.first << ": CANCELLED\tassigning" <<  plansys2_msgs::msg::ActionExecutionInfo::CANCELLED << "#" << info.status << std::flush << std::endl;
         break;
       default:
-        // std::cout << action.first << ": STATUS assignment error!!!" << std::flush << std::endl;
         break;
     }
 

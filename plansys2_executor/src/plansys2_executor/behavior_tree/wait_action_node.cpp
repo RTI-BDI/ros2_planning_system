@@ -36,13 +36,13 @@ WaitAction::tick()
 {
   std::string action;
   getInput("action", action);
-
-  if(action == (*early_stop_action_fullname_))
-    return BT::NodeStatus::RUNNING; // do not start and exit from "controller", i.e. Executor Node
-
+ 
   if ((*action_map_).find(action) == (*action_map_).end()) {
     return BT::NodeStatus::RUNNING;  // Not started yet
   }
+
+  if(!corresponding_plan_item_->committed)// action not committed for execution anymore: do not start and exit from "controller", i.e. Executor Node
+    return BT::NodeStatus::RUNNING; 
 
   if ((*action_map_)[action].action_executor != nullptr &&
     (*action_map_)[action].action_executor->is_finished() &&
