@@ -392,7 +392,7 @@ ExecutorNode::get_updated_feedback_service_callback(
   const std::shared_ptr<plansys2_msgs::srv::GetUpdatedFeedback::Response> response)
 {
   std::vector<plansys2_msgs::msg::ActionExecutionInfo> actionExecInfo;
-  if (current_plan_) {
+  if (current_plan_.has_value()) {
     actionExecInfo = get_feedback_info();
   }
   response->action_execution_status = actionExecInfo;
@@ -728,6 +728,9 @@ ExecutorNode::get_feedback_info()
       default:
         break;
     }
+
+    info.at_start_applied = action.second.at_start_effects_applied;
+    info.at_end_applied = action.second.at_end_effects_applied;
 
     info.action_full_name = action.first;
     info.start_stamp = action.second.action_executor->get_start_time();

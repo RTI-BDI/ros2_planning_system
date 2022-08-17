@@ -1,13 +1,16 @@
-string NOT_EXECUTED="1"
-string EXECUTING="2"
-string FAILED="3"
-string SUCCEEDED="4"
-string CANCELLED="5"
+int16 NOT_EXECUTED=1
+int16 EXECUTING=2
+int16 FAILED=3
+int16 SUCCEEDED=4
+int16 CANCELLED=5
 
-string status
+int16 status
 
 builtin_interfaces/Time start_stamp
 builtin_interfaces/Time status_stamp
+
+bool at_start_applied
+bool at_end_applied
 
 string action_full_name
 

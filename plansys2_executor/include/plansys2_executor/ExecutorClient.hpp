@@ -50,6 +50,7 @@ public:
   std::optional<plansys2_msgs::msg::Plan> getPlan();
 
   ExecutePlan::Feedback getFeedBack(const bool& force_update = false) {
+    executing_plan_ = is_plan_executing();
     if(executing_plan_ && force_update)
     {
       feedback_ = get_updated_feedback_info();
@@ -60,10 +61,15 @@ public:
   std::optional<ExecutePlan::Result> getResult();
 
 private:
+  bool is_plan_executing(){
+    return getPlan().has_value();
+  }
+
+  ExecutePlan::Feedback get_updated_feedback_info();
+  
   // client instance to make the request to the get updated feedback srv
   rclcpp::Client<plansys2_msgs::srv::GetUpdatedFeedback>::SharedPtr get_updated_feedback_client_;
 
-  ExecutePlan::Feedback get_updated_feedback_info();
 
   rclcpp::Node::SharedPtr node_;
 

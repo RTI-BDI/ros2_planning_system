@@ -64,6 +64,7 @@ ExecutorClient::createActionClient()
 bool
 ExecutorClient::start_plan_execution(const Plan & plan)
 {
+  executing_plan_ = is_plan_executing();
   if (!executing_plan_) {
     createActionClient();
     auto success = on_new_goal_received(plan);
@@ -82,6 +83,7 @@ ExecutorClient::start_plan_execution(const Plan & plan)
 bool
 ExecutorClient::execute_and_check_plan()
 {
+  executing_plan_ = is_plan_executing();
   if (rclcpp::ok() && !goal_result_available_) {
     rclcpp::spin_some(node_);
 
@@ -272,29 +274,36 @@ ExecutorClient::get_updated_feedback_info()
 bool
 ExecutorClient::early_arrest_request(const plansys2_msgs::msg::Plan & plan)
 {
-
-  while (!early_arrest_request_client_->wait_for_service(std::chrono::seconds(5))) {
-    if (!rclcpp::ok()) {
-      return false;
-    }
-    RCLCPP_ERROR_STREAM(
-      node_->get_logger(),
-      early_arrest_request_client_->get_service_name() <<
-        " service  client: waiting for service to appear...");
-  }
-
-  auto request = std::make_shared<EarlyArrestRequest::Request>();
-  request->committed_plan = plan;
-  auto future_result = early_arrest_request_client_->async_send_request(request);
-
-  if (rclcpp::spin_until_future_complete(node_, future_result, std::chrono::seconds(1)) !=
-    rclcpp::FutureReturnCode::SUCCESS)
+  executing_plan_ = is_plan_executing();
+  if(!executing_plan_)
   {
     return false;
   }
+  else
+  {
+    while (!early_arrest_request_client_->wait_for_service(std::chrono::seconds(5))) {
+      if (!rclcpp::ok()) {
+        return false;
+      }
+      RCLCPP_ERROR_STREAM(
+        node_->get_logger(),
+        early_arrest_request_client_->get_service_name() <<
+          " service  client: waiting for service to appear...");
+    }
 
-  auto result = *future_result.get();
-  return result.accepted;
+    auto request = std::make_shared<EarlyArrestRequest::Request>();
+    request->committed_plan = plan;
+    auto future_result = early_arrest_request_client_->async_send_request(request);
+
+    if (rclcpp::spin_until_future_complete(node_, future_result, std::chrono::seconds(1)) !=
+      rclcpp::FutureReturnCode::SUCCESS)
+    {
+      return false;
+    }
+
+    auto result = *future_result.get();
+    return result.accepted;
+  }
 }
 
 std::vector<plansys2_msgs::msg::Tree> ExecutorClient::getOrderedSubGoals()
@@ -362,10 +371,10 @@ std::optional<Plan> ExecutorClient::getPlan()
   if (result.success) {
     return result.plan;
   } else {
-    RCLCPP_ERROR_STREAM(
-      node_->get_logger(),
-      get_plan_client_->get_service_name() << ": " <<
-        result.error_info);
+    // RCLCPP_ERROR_STREAM(
+    //   node_->get_logger(),
+    //   get_plan_client_->get_service_name() << ": " <<
+    //     result.error_info);
     return {};
   }
 }

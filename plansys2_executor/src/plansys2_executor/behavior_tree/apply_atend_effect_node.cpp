@@ -43,8 +43,8 @@ ApplyAtEndEffect::tick()
 
   auto effect = (*action_map_)[action].durative_action_info->at_end_effects;
   if (!(*action_map_)[action].at_end_effects_applied) {
-    (*action_map_)[action].at_end_effects_applied = true;
     apply(effect, problem_client_, 0);
+    (*action_map_)[action].at_end_effects_applied = true;
   }
   
   return BT::NodeStatus::SUCCESS;

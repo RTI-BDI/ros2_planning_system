@@ -42,10 +42,9 @@ ApplyAtStartEffect::tick()
   getInput("action", action);
 
   auto effect = (*action_map_)[action].durative_action_info->at_start_effects;
-
   if (!(*action_map_)[action].at_start_effects_applied) {
-    (*action_map_)[action].at_start_effects_applied = true;
     apply(effect, problem_client_, 0);
+    (*action_map_)[action].at_start_effects_applied = true;
   }
 
   return BT::NodeStatus::SUCCESS;
