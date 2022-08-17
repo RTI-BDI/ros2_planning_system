@@ -116,6 +116,13 @@ ExecutorNode::ExecutorNode()
       &ExecutorNode::get_plan_service_callback,
       this, std::placeholders::_1, std::placeholders::_2,
       std::placeholders::_3));
+
+  get_updated_feedback_service_ = create_service<plansys2_msgs::srv::GetUpdatedFeedback>(
+    "executor/get_updated_feedback",
+    std::bind(
+      &ExecutorNode::get_updated_feedback_service_callback,
+      this, std::placeholders::_1, std::placeholders::_2,
+      std::placeholders::_3));
 }
 
 
@@ -378,6 +385,19 @@ ExecutorNode::get_plan_service_callback(
   }
 }
 
+void
+ExecutorNode::get_updated_feedback_service_callback(
+  const std::shared_ptr<rmw_request_id_t> request_header,
+  const std::shared_ptr<plansys2_msgs::srv::GetUpdatedFeedback::Request> request,
+  const std::shared_ptr<plansys2_msgs::srv::GetUpdatedFeedback::Response> response)
+{
+  std::vector<plansys2_msgs::msg::ActionExecutionInfo> actionExecInfo;
+  if (current_plan_) {
+    actionExecInfo = get_feedback_info();
+  }
+  response->action_execution_status = actionExecInfo;
+}
+
 rclcpp_action::GoalResponse
 ExecutorNode::handle_goal(
   const rclcpp_action::GoalUUID & uuid,
@@ -445,39 +465,39 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
 
   executing_plan_pub_->publish(current_plan_.value());
 
-  auto action_map = std::make_shared<std::map<std::string, ActionExecutionInfo>>();
+  action_map_ = std::make_shared<std::map<std::string, ActionExecutionInfo>>();
   auto action_timeout_actions = this->get_parameter("action_timeouts.actions").as_string_array();
 
   for (const auto & plan_item : current_plan_.value().items) {
     auto index = plan_item.action + ":" + std::to_string(static_cast<int>(plan_item.time * 1000));
 
-    (*action_map)[index] = ActionExecutionInfo();
-    (*action_map)[index].action_executor =
+    (*action_map_)[index] = ActionExecutionInfo();
+    (*action_map_)[index].action_executor =
       ActionExecutor::make_shared(plan_item.action, shared_from_this(), (current_plan_.value().plan_index), plan_item.time);
-    (*action_map)[index].durative_action_info =
+    (*action_map_)[index].durative_action_info =
       domain_client_->getDurativeAction(
       get_action_name(plan_item.action), get_action_params(plan_item.action));
 
-    (*action_map)[index].duration = plan_item.duration;
-    std::string action_name = (*action_map)[index].durative_action_info->name;
+    (*action_map_)[index].duration = plan_item.duration;
+    std::string action_name = (*action_map_)[index].durative_action_info->name;
     if (std::find(
         action_timeout_actions.begin(), action_timeout_actions.end(),
         action_name) != action_timeout_actions.end() &&
       this->has_parameter("action_timeouts." + action_name + ".duration_overrun_percentage"))
     {
-      (*action_map)[index].duration_overrun_percentage = this->get_parameter(
+      (*action_map_)[index].duration_overrun_percentage = this->get_parameter(
         "action_timeouts." + action_name + ".duration_overrun_percentage").as_double();
     }
     RCLCPP_INFO(
       get_logger(), "Action %s timeout percentage %f", action_name.c_str(),
-      (*action_map)[index].duration_overrun_percentage);
+      (*action_map_)[index].duration_overrun_percentage);
   }
   ordered_sub_goals_ = getOrderedSubGoals();
 
   BTBuilder bt_builder(aux_node_, action_bt_xml_);
   auto blackboard = BT::Blackboard::create();
 
-  blackboard->set("action_map", action_map);
+  blackboard->set("action_map", action_map_);
   blackboard->set("node", shared_from_this());
   blackboard->set("domain_client", domain_client_);
   blackboard->set("problem_client", problem_client_);
@@ -497,7 +517,7 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
   std_msgs::msg::String dotgraph_msg;
   dotgraph_msg.data =
     bt_builder.get_dotgraph(
-    action_graph, action_map, this->get_parameter(
+    action_graph, action_map_, this->get_parameter(
       "enable_dotgraph_legend").as_bool(), this->get_parameter("print_graph").as_bool());
   dotgraph_pub_->publish(dotgraph_msg);
 
@@ -557,8 +577,8 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
 #endif
 
   auto info_pub = create_wall_timer(
-    1s, [this, &action_map]() {
-      auto msgs = get_feedback_info(action_map);
+    1s, [this]() {
+      auto msgs = get_feedback_info();
       for (const auto & msg : msgs) {
         execution_info_pub_->publish(msg);
       }
@@ -588,12 +608,12 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
       status = BT::NodeStatus::FAILURE;
     }
 
-    feedback->action_execution_status = get_feedback_info(action_map);
+    feedback->action_execution_status = get_feedback_info();
     goal_handle->publish_feedback(feedback);
 
     dotgraph_msg.data =
       bt_builder.get_dotgraph(
-      action_graph, action_map, this->get_parameter(
+      action_graph, action_map_, this->get_parameter(
         "enable_dotgraph_legend").as_bool());
     dotgraph_pub_->publish(dotgraph_msg);
 
@@ -612,12 +632,12 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
 
   dotgraph_msg.data =
     bt_builder.get_dotgraph(
-    action_graph, action_map, this->get_parameter(
+    action_graph, action_map_, this->get_parameter(
       "enable_dotgraph_legend").as_bool());
   dotgraph_pub_->publish(dotgraph_msg);
 
   result->success = status == BT::NodeStatus::SUCCESS;
-  result->action_execution_status = get_feedback_info(action_map);
+  result->action_execution_status = get_feedback_info();
 
   size_t i = 0;
   if(current_plan_.has_value())
@@ -677,17 +697,15 @@ ExecutorNode::handle_accepted(const std::shared_ptr<GoalHandleExecutePlan> goal_
 }
 
 std::vector<plansys2_msgs::msg::ActionExecutionInfo>
-ExecutorNode::get_feedback_info(
-  std::shared_ptr<std::map<std::string,
-  ActionExecutionInfo>> action_map)
+ExecutorNode::get_feedback_info()
 {
   std::vector<plansys2_msgs::msg::ActionExecutionInfo> ret;
 
-  if (!action_map) {
+  if (!action_map_) {
     return ret;
   }
 
-  for (const auto & action : *action_map) {
+  for (const auto & action : *action_map_) {
     plansys2_msgs::msg::ActionExecutionInfo info;
 
     switch (action.second.action_executor->get_internal_status()) {

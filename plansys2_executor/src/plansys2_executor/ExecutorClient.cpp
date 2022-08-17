@@ -21,6 +21,14 @@
 #include "plansys2_executor/ExecutorClient.hpp"
 #include "plansys2_msgs/msg/action_execution_info.hpp"
 
+using plansys2_msgs::msg::ActionExecutionInfo;
+using plansys2_msgs::msg::Plan;
+
+using plansys2_msgs::srv::GetOrderedSubGoals;
+using plansys2_msgs::srv::GetPlan;
+using plansys2_msgs::srv::GetUpdatedFeedback;
+using plansys2_msgs::srv::EarlyArrestRequest;
+
 namespace plansys2
 {
 
@@ -35,11 +43,12 @@ ExecutorClient::ExecutorClient(const std::string & node_name)
 
   createActionClient();
 
-  get_ordered_sub_goals_client_ = node_->create_client<plansys2_msgs::srv::GetOrderedSubGoals>(
+  get_ordered_sub_goals_client_ = node_->create_client<GetOrderedSubGoals>(
     "executor/get_ordered_sub_goals");
-  get_plan_client_ = node_->create_client<plansys2_msgs::srv::GetPlan>("executor/get_plan");
+  get_plan_client_ = node_->create_client<GetPlan>("executor/get_plan");
+  get_updated_feedback_client_ = node_->create_client<GetUpdatedFeedback>("executor/get_updated_feedback");
 
-  early_arrest_request_client_ = node_->create_client<plansys2_msgs::srv::EarlyArrestRequest>("executor/early_arrest");
+  early_arrest_request_client_ = node_->create_client<EarlyArrestRequest>("executor/early_arrest");
 }
 
 void
@@ -53,7 +62,7 @@ ExecutorClient::createActionClient()
 }
 
 bool
-ExecutorClient::start_plan_execution(const plansys2_msgs::msg::Plan & plan)
+ExecutorClient::start_plan_execution(const Plan & plan)
 {
   if (!executing_plan_) {
     createActionClient();
@@ -92,7 +101,7 @@ ExecutorClient::execute_and_check_plan()
         RCLCPP_ERROR(node_->get_logger(), "Plan Failed");
         for (auto msg : result_.result->action_execution_status) {
           //switch (msg.status) {
-            if(msg.status == plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED)
+            if(msg.status == ActionExecutionInfo::SUCCEEDED)
               RCLCPP_WARN_STREAM(
                 node_->get_logger(),
                 "Action: " <<
@@ -100,7 +109,7 @@ ExecutorClient::execute_and_check_plan()
                   " succeeded with message_status: " <<
                   msg.message_status);
               //break;
-            else if(msg.status == plansys2_msgs::msg::ActionExecutionInfo::FAILED)
+            else if(msg.status == ActionExecutionInfo::FAILED)
               RCLCPP_ERROR_STREAM(
                 node_->get_logger(),
                 "Action: " <<
@@ -108,21 +117,21 @@ ExecutorClient::execute_and_check_plan()
                   " failed with message_status: " <<
                   msg.message_status);
               //break;
-            else if(msg.status == plansys2_msgs::msg::ActionExecutionInfo::NOT_EXECUTED)
+            else if(msg.status == ActionExecutionInfo::NOT_EXECUTED)
               RCLCPP_WARN_STREAM(
                 node_->get_logger(),
                 "Action: " <<
                   msg.action_full_name <<
                   " was not executed");
               //break;
-            else if(msg.status == plansys2_msgs::msg::ActionExecutionInfo::CANCELLED)
+            else if(msg.status == ActionExecutionInfo::CANCELLED)
               RCLCPP_WARN_STREAM(
                 node_->get_logger(),
                 "Action: " <<
                   msg.action_full_name <<
                   " was cancelled");
               //break;
-            else if(msg.status == plansys2_msgs::msg::ActionExecutionInfo::EXECUTING)
+            else if(msg.status == ActionExecutionInfo::EXECUTING)
               RCLCPP_WARN_STREAM(
                 node_->get_logger(),
                 "Action: " <<
@@ -153,7 +162,7 @@ ExecutorClient::execute_and_check_plan()
 
 
 bool
-ExecutorClient::on_new_goal_received(const plansys2_msgs::msg::Plan & plan)
+ExecutorClient::on_new_goal_received(const Plan & plan)
 {
   auto goal = ExecutePlan::Goal();
   goal.plan = plan;
@@ -218,8 +227,50 @@ ExecutorClient::cancel_plan_execution()
   goal_result_available_ = false;
 }
 
+ExecutePlan::Feedback 
+ExecutorClient::get_updated_feedback_info()
+{
+  ExecutePlan::Feedback feedback = ExecutePlan::Feedback{};
+  if(executing_plan_)
+  {
+    try{  
+      while (!get_updated_feedback_client_->wait_for_service(std::chrono::seconds(1))) {
+          if (!rclcpp::ok()) {
+              return feedback;
+          }
+          RCLCPP_ERROR_STREAM(
+              node_->get_logger(),
+              get_updated_feedback_client_->get_service_name() <<
+                  " service client: waiting for service to appear...");
+      }
+
+      auto future_result = get_updated_feedback_client_->async_send_request(std::make_shared<GetUpdatedFeedback::Request>());
+
+      if (rclcpp::spin_until_future_complete(node_, future_result, std::chrono::seconds(1)) !=
+          rclcpp::FutureReturnCode::SUCCESS)
+      {
+          return feedback;
+      }
+
+      auto response = future_result.get();
+      feedback.action_execution_status = response->action_execution_status;
+    
+    }
+    catch(const rclcpp::exceptions::RCLError& rclerr)
+    {
+        RCLCPP_ERROR(node_->get_logger(), rclerr.what());
+    }
+    catch(const std::exception &e)
+    {
+        RCLCPP_ERROR(node_->get_logger(), "Response error in while trying to call %s srv", get_updated_feedback_client_->get_service_name());
+    }
+  }
+  return feedback;
+}
+
+
 bool
-ExecutorClient::stop_plan_execution_at(const plansys2_msgs::msg::Plan & plan)
+ExecutorClient::early_arrest_request(const plansys2_msgs::msg::Plan & plan)
 {
 
   while (!early_arrest_request_client_->wait_for_service(std::chrono::seconds(5))) {
@@ -232,7 +283,7 @@ ExecutorClient::stop_plan_execution_at(const plansys2_msgs::msg::Plan & plan)
         " service  client: waiting for service to appear...");
   }
 
-  auto request = std::make_shared<plansys2_msgs::srv::EarlyArrestRequest::Request>();
+  auto request = std::make_shared<EarlyArrestRequest::Request>();
   request->committed_plan = plan;
   auto future_result = early_arrest_request_client_->async_send_request(request);
 
@@ -260,7 +311,7 @@ std::vector<plansys2_msgs::msg::Tree> ExecutorClient::getOrderedSubGoals()
         " service  client: waiting for service to appear...");
   }
 
-  auto request = std::make_shared<plansys2_msgs::srv::GetOrderedSubGoals::Request>();
+  auto request = std::make_shared<GetOrderedSubGoals::Request>();
 
   auto future_result = get_ordered_sub_goals_client_->async_send_request(request);
 
@@ -284,7 +335,7 @@ std::vector<plansys2_msgs::msg::Tree> ExecutorClient::getOrderedSubGoals()
   return ret;
 }
 
-std::optional<plansys2_msgs::msg::Plan> ExecutorClient::getPlan()
+std::optional<Plan> ExecutorClient::getPlan()
 {
   while (!get_plan_client_->wait_for_service(std::chrono::seconds(5))) {
     if (!rclcpp::ok()) {
@@ -296,7 +347,7 @@ std::optional<plansys2_msgs::msg::Plan> ExecutorClient::getPlan()
         " service  client: waiting for service to appear...");
   }
 
-  auto request = std::make_shared<plansys2_msgs::srv::GetPlan::Request>();
+  auto request = std::make_shared<GetPlan::Request>();
 
   auto future_result = get_plan_client_->async_send_request(request);
 

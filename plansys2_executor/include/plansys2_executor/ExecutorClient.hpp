@@ -24,6 +24,7 @@
 #include "plansys2_msgs/srv/get_ordered_sub_goals.hpp"
 #include "plansys2_msgs/srv/early_arrest_request.hpp"
 #include "plansys2_msgs/srv/get_plan.hpp"
+#include "plansys2_msgs/srv/get_updated_feedback.hpp"
 #include "plansys2_msgs/msg/plan.hpp"
 #include "plansys2_msgs/msg/tree.hpp"
 
@@ -44,18 +45,26 @@ public:
   bool start_plan_execution(const plansys2_msgs::msg::Plan & plan);
   bool execute_and_check_plan();
   void cancel_plan_execution();
-  bool stop_plan_execution_at(const plansys2_msgs::msg::Plan & plan);
+  bool early_arrest_request(const plansys2_msgs::msg::Plan & plan);
   std::vector<plansys2_msgs::msg::Tree> getOrderedSubGoals();
   std::optional<plansys2_msgs::msg::Plan> getPlan();
 
-  ExecutePlan::Feedback getFeedBack() {
-    // for(auto fas : feedback_.action_execution_status)
-    //     std::cout << "Feed: getFeedback " << fas.action_full_name << ": "  <<  fas.status << "b" << std::endl << std::endl << std::endl << std::endl << std::flush;
+  ExecutePlan::Feedback getFeedBack(const bool& force_update = false) {
+    if(executing_plan_ && force_update)
+    {
+      feedback_ = get_updated_feedback_info();
+    }
+    //otherwise pick lates received update
     return feedback_;
   }
   std::optional<ExecutePlan::Result> getResult();
 
 private:
+  // client instance to make the request to the get updated feedback srv
+  rclcpp::Client<plansys2_msgs::srv::GetUpdatedFeedback>::SharedPtr get_updated_feedback_client_;
+
+  ExecutePlan::Feedback get_updated_feedback_info();
+
   rclcpp::Node::SharedPtr node_;
 
   rclcpp_action::Client<ExecutePlan>::SharedPtr action_client_;

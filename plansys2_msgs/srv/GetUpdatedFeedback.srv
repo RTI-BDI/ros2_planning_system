@@ -1,0 +1,3 @@
+std_msgs/Empty request
+---
+plansys2_msgs/ActionExecutionInfo[] action_execution_status

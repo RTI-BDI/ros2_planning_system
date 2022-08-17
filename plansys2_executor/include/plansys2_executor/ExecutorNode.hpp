@@ -32,6 +32,7 @@
 #include "plansys2_msgs/msg/action_execution_info.hpp"
 #include "plansys2_msgs/srv/get_ordered_sub_goals.hpp"
 #include "plansys2_msgs/srv/early_arrest_request.hpp"
+#include "plansys2_msgs/srv/get_updated_feedback.hpp"
 #include "plansys2_msgs/msg/plan.hpp"
 #include "std_msgs/msg/string.hpp"
 
@@ -80,6 +81,11 @@ public:
     const std::shared_ptr<plansys2_msgs::srv::GetPlan::Request> request,
     const std::shared_ptr<plansys2_msgs::srv::GetPlan::Response> response);
 
+  void get_updated_feedback_service_callback(
+    const std::shared_ptr<rmw_request_id_t> request_header,
+    const std::shared_ptr<plansys2_msgs::srv::GetUpdatedFeedback::Request> request,
+    const std::shared_ptr<plansys2_msgs::srv::GetUpdatedFeedback::Response> response);
+
 protected:
   /* Returns true if the two plans are a perfect match*/
   static bool plan_items_match(const plansys2_msgs::msg::Plan& p1, const plansys2_msgs::msg::Plan& p2, const bool& consider_committed = false);
@@ -116,6 +122,7 @@ protected:
   bool cancel_plan_requested_;
   std::optional<plansys2_msgs::msg::Plan> current_plan_;
   std::optional<std::vector<plansys2_msgs::msg::Tree>> ordered_sub_goals_;
+  std::shared_ptr<std::map<std::string, ActionExecutionInfo>> action_map_;
 
   std::string action_bt_xml_;
 
@@ -135,6 +142,8 @@ protected:
   std::optional<std::vector<plansys2_msgs::msg::Tree>> getOrderedSubGoals();
 
   rclcpp::Service<plansys2_msgs::srv::GetPlan>::SharedPtr get_plan_service_;
+  
+  rclcpp::Service<plansys2_msgs::srv::GetUpdatedFeedback>::SharedPtr get_updated_feedback_service_;
 
   std::map<std::string, std::vector<std::string>> actions_waiting_map_;
 
@@ -152,8 +161,7 @@ protected:
 
   void handle_accepted(const std::shared_ptr<GoalHandleExecutePlan> goal_handle);
 
-  std::vector<plansys2_msgs::msg::ActionExecutionInfo> get_feedback_info(
-    std::shared_ptr<std::map<std::string, ActionExecutionInfo>> action_map);
+  std::vector<plansys2_msgs::msg::ActionExecutionInfo> get_feedback_info();
 
   void print_execution_info(
     std::shared_ptr<std::map<std::string, ActionExecutionInfo>> exec_info);

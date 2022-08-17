@@ -41,6 +41,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/GetProblemInstances.srv"
   "srv/GetProblemInstanceDetails.srv"
   "srv/GetStates.srv"
+  "srv/GetUpdatedFeedback.srv"
   "srv/IsProblemGoalSatisfied.srv"
   "srv/RemoveProblemGoal.srv"
   "srv/ClearProblemKnowledge.srv"
