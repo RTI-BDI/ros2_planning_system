@@ -41,6 +41,8 @@ ApplyAtStartEffect::tick()
   std::string action;
   getInput("action", action);
 
+  std::cout << "Apply effect at start for " << action << std::flush << std::endl;
+
   auto effect = (*action_map_)[action].durative_action_info->at_start_effects;
   if (!(*action_map_)[action].at_start_effects_applied) {
     apply(effect, problem_client_, 0);

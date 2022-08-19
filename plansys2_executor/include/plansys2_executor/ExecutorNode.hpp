@@ -167,6 +167,8 @@ protected:
     std::shared_ptr<std::map<std::string, ActionExecutionInfo>> exec_info);
 
   std::map<std::string, std::vector<std::string>> build_actions_waiting_map(const BT::Tree& tree);
+
+  bool hasEarlyAbortAccepted();
 };
 
 }  // namespace plansys2

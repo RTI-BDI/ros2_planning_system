@@ -256,7 +256,7 @@ ExecutorClient::get_updated_feedback_info()
 
       auto response = future_result.get();
       feedback.action_execution_status = response->action_execution_status;
-    
+      feedback.early_abort_accepted = response->early_abort_accepted;
     }
     catch(const rclcpp::exceptions::RCLError& rclerr)
     {

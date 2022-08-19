@@ -385,6 +385,17 @@ ExecutorNode::get_plan_service_callback(
   }
 }
 
+bool 
+ExecutorNode::hasEarlyAbortAccepted(){
+  if(current_plan_.has_value())
+  {
+    for(PlanItem pi : current_plan_.value().items)
+      if(!pi.committed)
+        return true;
+  }
+  return false;
+}
+
 void
 ExecutorNode::get_updated_feedback_service_callback(
   const std::shared_ptr<rmw_request_id_t> request_header,
@@ -394,6 +405,7 @@ ExecutorNode::get_updated_feedback_service_callback(
   std::vector<plansys2_msgs::msg::ActionExecutionInfo> actionExecInfo;
   if (current_plan_.has_value()) {
     actionExecInfo = get_feedback_info();
+    response->early_abort_accepted = hasEarlyAbortAccepted();
   }
   response->action_execution_status = actionExecInfo;
 }
