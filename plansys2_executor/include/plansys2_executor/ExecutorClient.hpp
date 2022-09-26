@@ -44,7 +44,7 @@ public:
 
   bool start_plan_execution(const plansys2_msgs::msg::Plan & plan);
   bool execute_and_check_plan();
-  void cancel_plan_execution();
+  bool cancel_plan_execution();
   bool early_arrest_request(const plansys2_msgs::msg::Plan & plan);
   std::vector<plansys2_msgs::msg::Tree> getOrderedSubGoals();
   std::optional<plansys2_msgs::msg::Plan> getPlan();

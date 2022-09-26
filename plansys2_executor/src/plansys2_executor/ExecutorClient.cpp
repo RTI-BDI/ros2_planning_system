@@ -210,9 +210,10 @@ ExecutorClient::should_cancel_goal()
          status == action_msgs::msg::GoalStatus::STATUS_EXECUTING;
 }
 
-void
+bool
 ExecutorClient::cancel_plan_execution()
 {
+  bool done = false;
   if (should_cancel_goal()) {
     auto future_cancel = action_client_->async_cancel_goal(goal_handle_);
     if (rclcpp::spin_until_future_complete(
@@ -223,10 +224,13 @@ ExecutorClient::cancel_plan_execution()
         node_->get_logger(),
         "Failed to cancel action server for execute_plan");
     }
+    else
+      done = true;
   }
 
   executing_plan_ = false;
   goal_result_available_ = false;
+  return done;
 }
 
 ExecutePlan::Feedback 
