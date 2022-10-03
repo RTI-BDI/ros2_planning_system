@@ -458,6 +458,7 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
 {
   auto feedback = std::make_shared<ExecutePlan::Feedback>();
   auto result = std::make_shared<ExecutePlan::Result>();
+  result->success = false;
 
   reset_plan_exec_data();
   current_plan_ = goal_handle->get_goal()->plan;
@@ -469,6 +470,7 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
 
     // Publish void plan
     executing_plan_pub_->publish(plansys2_msgs::msg::Plan());
+    reset_plan_exec_data();
     return;
   }
 
@@ -524,104 +526,127 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
   factory.registerNodeType<ApplyAtEndEffect>("ApplyAtEndEffect");
   factory.registerNodeType<CheckTimeout>("CheckTimeout");
 
-  auto bt_xml_tree = bt_builder.get_tree(current_plan_.value());
-  auto action_graph = bt_builder.get_graph(current_plan_.value());
-  std_msgs::msg::String dotgraph_msg;
-  dotgraph_msg.data =
-    bt_builder.get_dotgraph(
-    action_graph, action_map_, this->get_parameter(
-      "enable_dotgraph_legend").as_bool(), this->get_parameter("print_graph").as_bool());
-  dotgraph_pub_->publish(dotgraph_msg);
-
-  std::filesystem::path tp = std::filesystem::temp_directory_path();
-  std::ofstream out(std::string("/tmp/") + get_namespace() + "/bt.xml");
-  out << bt_xml_tree;
-  out.close();
-
-  tree_ = factory.createTreeFromText(bt_xml_tree, blackboard);
+  auto action_graph_opt = bt_builder.get_graph(current_plan_.value());
   
-  // Set in WaitAction node reference to early stop action string such that they know whether to stop advancement
-  // in case of an earlier stop requested (e.g. if b->c, therefore in c WaitAction for b and early stop in b is 
-  // requested WaitAction for b in c does not grant any futher progress)
-  
-  std::string current_action_ = "";
-  for(auto btnode : tree_.nodes)
+  if(action_graph_opt.has_value())
   {
-    if(btnode->registrationName() == "Sequence" && btnode->name().find(WRAP_SEQUENCE_PREFIX) == std::string::npos)
-      current_action_ = btnode->name();
+    auto action_graph = action_graph_opt.value();
+    auto bt_xml_tree = bt_builder.get_tree(action_graph);
+    std_msgs::msg::String dotgraph_msg;
+    dotgraph_msg.data =
+      bt_builder.get_dotgraph(
+      action_graph, action_map_, this->get_parameter(
+        "enable_dotgraph_legend").as_bool(), this->get_parameter("print_graph").as_bool());
+    dotgraph_pub_->publish(dotgraph_msg);
+
+    std::filesystem::path tp = std::filesystem::temp_directory_path();
+    std::ofstream out(std::string("/tmp/") + get_namespace() + "/bt.xml");
+    out << bt_xml_tree;
+    out.close();
+
+    tree_ = factory.createTreeFromText(bt_xml_tree, blackboard);
     
-    if(btnode->registrationName() == "WaitAction")
+    // Set in WaitAction node reference to early stop action string such that they know whether to stop advancement
+    // in case of an earlier stop requested (e.g. if b->c, therefore in c WaitAction for b and early stop in b is 
+    // requested WaitAction for b in c does not grant any futher progress)
+    
+    std::string current_action_ = "";
+    for(auto btnode : tree_.nodes)
     {
-      if(current_plan_.has_value())
+      if(btnode->registrationName() == "Sequence" && btnode->name().find(WRAP_SEQUENCE_PREFIX) == std::string::npos)
+        current_action_ = btnode->name();
+      
+      if(btnode->registrationName() == "WaitAction")
       {
-        int pi_index = find_plan_item(current_action_, current_plan_.value());
-        if(pi_index >= 0)
+        if(current_plan_.has_value())
         {
-          PlanItem* pi = &(current_plan_.value().items[pi_index]);
-          (dynamic_cast<plansys2::WaitAction&>(*btnode)).setCorrespondingPlanItemPtr(pi);
+          int pi_index = find_plan_item(current_action_, current_plan_.value());
+          if(pi_index >= 0)
+          {
+            PlanItem* pi = &(current_plan_.value().items[pi_index]);
+            (dynamic_cast<plansys2::WaitAction&>(*btnode)).setCorrespondingPlanItemPtr(pi);
+          }
         }
       }
     }
-  }
 
-  actions_waiting_map_ = build_actions_waiting_map(tree_);
+    actions_waiting_map_ = build_actions_waiting_map(tree_);
 
-#ifdef ZMQ_FOUND
-  unsigned int publisher_port = this->get_parameter("publisher_port").as_int();
-  unsigned int server_port = this->get_parameter("server_port").as_int();
-  unsigned int max_msgs_per_second = this->get_parameter("max_msgs_per_second").as_int();
+    #ifdef ZMQ_FOUND
+      unsigned int publisher_port = this->get_parameter("publisher_port").as_int();
+      unsigned int server_port = this->get_parameter("server_port").as_int();
+      unsigned int max_msgs_per_second = this->get_parameter("max_msgs_per_second").as_int();
 
-  std::unique_ptr<BT::PublisherZMQ> publisher_zmq;
-  if (this->get_parameter("enable_groot_monitoring").as_bool()) {
-    RCLCPP_DEBUG(
-      get_logger(),
-      "[%s] Groot monitoring: Publisher port: %d, Server port: %d, Max msgs per second: %d",
-      get_name(), publisher_port, server_port, max_msgs_per_second);
-    try {
-      publisher_zmq.reset(
-        new BT::PublisherZMQ(
-          tree_, max_msgs_per_second, publisher_port,
-          server_port));
-    } catch (const BT::LogicError & exc) {
-      RCLCPP_ERROR(get_logger(), "ZMQ error: %s", exc.what());
-    }
-  }
-#endif
-
-  auto info_pub = create_wall_timer(
-    1s, [this]() {
-      auto msgs = get_feedback_info();
-      for (const auto & msg : msgs) {
-        execution_info_pub_->publish(msg);
-      }
-    });
-
-  rclcpp::Rate rate(10);
-  auto start = now();
-  auto status = BT::NodeStatus::RUNNING;
-
-  while (status == BT::NodeStatus::RUNNING && !cancel_plan_requested_) {
-    try {
-      status = tree_.tickRoot();
-
-      int committed_actions = count_committed_actions();
-      if(current_plan_.has_value() && current_plan_.value().items.size() > committed_actions)
-      {
-        //there has been an approved early request abortion
-        if(executed_actions()==committed_actions)//wait for all committed actions to successfully terminate
-        {
-          cancel_plan_requested_ = true;
-          status = BT::NodeStatus::SUCCESS;//still managed to arrive with success to "earlier" target
+      std::unique_ptr<BT::PublisherZMQ> publisher_zmq;
+      if (this->get_parameter("enable_groot_monitoring").as_bool()) {
+        RCLCPP_DEBUG(
+          get_logger(),
+          "[%s] Groot monitoring: Publisher port: %d, Server port: %d, Max msgs per second: %d",
+          get_name(), publisher_port, server_port, max_msgs_per_second);
+        try {
+          publisher_zmq.reset(
+            new BT::PublisherZMQ(
+              tree_, max_msgs_per_second, publisher_port,
+              server_port));
+        } catch (const BT::LogicError & exc) {
+          RCLCPP_ERROR(get_logger(), "ZMQ error: %s", exc.what());
         }
       }
+    #endif
 
-    } catch (std::exception & e) {
-      std::cerr << e.what() << std::endl;
-      status = BT::NodeStatus::FAILURE;
+    auto info_pub = create_wall_timer(
+      1s, [this]() {
+        auto msgs = get_feedback_info();
+        for (const auto & msg : msgs) {
+          execution_info_pub_->publish(msg);
+        }
+      });
+
+    rclcpp::Rate rate(10);
+    auto start = now();
+    auto status = BT::NodeStatus::RUNNING;
+
+    while (status == BT::NodeStatus::RUNNING && !cancel_plan_requested_) {
+      try {
+        status = tree_.tickRoot();
+
+        int committed_actions = count_committed_actions();
+        if(current_plan_.has_value() && current_plan_.value().items.size() > committed_actions)
+        {
+          //there has been an approved early request abortion
+          if(executed_actions()==committed_actions)//wait for all committed actions to successfully terminate
+          {
+            cancel_plan_requested_ = true;
+            status = BT::NodeStatus::SUCCESS;//still managed to arrive with success to "earlier" target
+          }
+        }
+
+      } catch (std::exception & e) {
+        std::cerr << e.what() << std::endl;
+        status = BT::NodeStatus::FAILURE;
+      }
+
+      feedback->action_execution_status = get_feedback_info();
+      goal_handle->publish_feedback(feedback);
+
+      dotgraph_msg.data =
+        bt_builder.get_dotgraph(
+        action_graph, action_map_, this->get_parameter(
+          "enable_dotgraph_legend").as_bool());
+      dotgraph_pub_->publish(dotgraph_msg);
+
+      if(!cancel_plan_requested_)
+        rate.sleep();
     }
 
-    feedback->action_execution_status = get_feedback_info();
-    goal_handle->publish_feedback(feedback);
+    if (cancel_plan_requested_) {
+      tree_.haltTree();
+    }
+
+    if (status == BT::NodeStatus::FAILURE) {
+      tree_.haltTree();
+      RCLCPP_ERROR(get_logger(), "Executor BT finished with FAILURE state");
+    }
 
     dotgraph_msg.data =
       bt_builder.get_dotgraph(
@@ -629,38 +654,20 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
         "enable_dotgraph_legend").as_bool());
     dotgraph_pub_->publish(dotgraph_msg);
 
-    if(!cancel_plan_requested_)
-      rate.sleep();
-  }
+    result->success = status == BT::NodeStatus::SUCCESS;
+    result->action_execution_status = get_feedback_info();
 
-  if (cancel_plan_requested_) {
-    tree_.haltTree();
-  }
+    size_t i = 0;
+    if(current_plan_.has_value())
+    {
+      while (i < result->action_execution_status.size() && result->success){
 
-  if (status == BT::NodeStatus::FAILURE) {
-    tree_.haltTree();
-    RCLCPP_ERROR(get_logger(), "Executor BT finished with FAILURE state");
-  }
-
-  dotgraph_msg.data =
-    bt_builder.get_dotgraph(
-    action_graph, action_map_, this->get_parameter(
-      "enable_dotgraph_legend").as_bool());
-  dotgraph_pub_->publish(dotgraph_msg);
-
-  result->success = status == BT::NodeStatus::SUCCESS;
-  result->action_execution_status = get_feedback_info();
-
-  size_t i = 0;
-  if(current_plan_.has_value())
-  {
-    while (i < result->action_execution_status.size() && result->success){
-
-      int pi_index = find_plan_item(result->action_execution_status[i].action_full_name, current_plan_.value());
-      if (pi_index >=0 && current_plan_.value().items[pi_index].committed && 
-          result->action_execution_status[i].status != plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED)//all committed actions must have been successfully exec.
-        result->success = false;
-      i++;
+        int pi_index = find_plan_item(result->action_execution_status[i].action_full_name, current_plan_.value());
+        if (pi_index >=0 && current_plan_.value().items[pi_index].committed && 
+            result->action_execution_status[i].status != plansys2_msgs::msg::ActionExecutionInfo::SUCCEEDED)//all committed actions must have been successfully exec.
+          result->success = false;
+        i++;
+      }
     }
   }
 

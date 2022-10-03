@@ -309,7 +309,7 @@ BTBuilder::get_state(
   }
 }
 
-Graph::Ptr
+std::optional<Graph::Ptr>
 BTBuilder::get_graph(const plansys2_msgs::msg::Plan & current_plan)
 {
   int node_counter = 0;
@@ -420,7 +420,9 @@ BTBuilder::get_graph(const plansys2_msgs::msg::Plan & current_plan)
       std::cerr << "[ERROR] requirement not met: [" <<
         parser::pddl::toString(req) << "]" << std::endl;
     }
-    assert(requirements.empty());
+    // if(!requirements.empty())
+    //   return std::nullopt;
+    //assert(requirements.empty());
 
     action_sequence.erase(action_sequence.begin());
   }
@@ -429,10 +431,8 @@ BTBuilder::get_graph(const plansys2_msgs::msg::Plan & current_plan)
 }
 
 std::string
-BTBuilder::get_tree(const plansys2_msgs::msg::Plan & current_plan)
+BTBuilder::get_tree(const Graph::Ptr& action_graph)
 {
-  auto action_graph = get_graph(current_plan);
-
   std::list<GraphNode::Ptr> used_actions;
   for (auto & root : action_graph->roots) {
     prune_forward(root, used_actions);

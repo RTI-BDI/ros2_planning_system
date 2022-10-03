@@ -78,8 +78,13 @@ class BTBuilder
 public:
   explicit BTBuilder(rclcpp::Node::SharedPtr node, const std::string & bt_action = "");
 
-  Graph::Ptr get_graph(const plansys2_msgs::msg::Plan & current_plan);
-  std::string get_tree(const plansys2_msgs::msg::Plan & current_plan);
+  std::optional<Graph::Ptr> get_graph(const plansys2_msgs::msg::Plan & current_plan);
+  std::string get_tree(const Graph::Ptr& current_plan);
+  std::string get_tree(const plansys2_msgs::msg::Plan & current_plan)
+  {
+    return get_tree(get_graph(current_plan).value_or(Graph::make_shared()));
+  }
+
   std::string get_dotgraph(
     Graph::Ptr action_graph, std::shared_ptr<std::map<std::string,
     ActionExecutionInfo>> action_map, bool enable_legend = false,

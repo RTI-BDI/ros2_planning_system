@@ -81,7 +81,7 @@ public:
 
   plansys2::Graph::Ptr get_graph(const plansys2_msgs::msg::Plan & current_plan)
   {
-    return BTBuilder::get_graph(current_plan);
+    return BTBuilder::get_graph(current_plan).value_or(plansys2::Graph::make_shared());
   }
 
   std::list<plansys2::GraphNode::Ptr> get_roots(

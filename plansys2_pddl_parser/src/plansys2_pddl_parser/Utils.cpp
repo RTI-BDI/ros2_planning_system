@@ -740,6 +740,14 @@ plansys2_msgs::msg::Tree fromString(const std::string & expr, bool negate, uint8
   return tree;
 }
 
+std::string removeSpacesAndParenthesis(const std::string& value){
+  std::string res;
+  for(int i=0; i<value.length(); i++)
+    if (value[i] != '(' && value[i] != ')' && value[i] != ' ')
+      res += value[i];
+  return res;
+}
+
 plansys2_msgs::msg::Node fromStringPredicate(const std::string & predicate)
 {
   plansys2_msgs::msg::Node ret;
@@ -759,6 +767,9 @@ plansys2_msgs::msg::Node fromStringPredicate(const std::string & predicate)
 
   tokens[0].erase(0, 1);
   ret.name = tokens[0];
+  //fix for above mishandling of spaces and '(' ')'
+  ret.name = removeSpacesAndParenthesis(ret.name);
+
 
   tokens.back().pop_back();
 
@@ -786,6 +797,8 @@ plansys2_msgs::msg::Node fromStringFunction(const std::string & function)
 
   if (std::regex_search(temp, match, name_regexp)) {
     ret.name = match.str(0);
+    //fix for above mishandling of spaces and '(' ')'
+    ret.name = removeSpacesAndParenthesis(ret.name);
     temp = match.suffix().str();
   }
 
