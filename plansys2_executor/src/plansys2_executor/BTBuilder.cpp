@@ -420,8 +420,8 @@ BTBuilder::get_graph(const plansys2_msgs::msg::Plan & current_plan)
       std::cerr << "[ERROR] requirement not met: [" <<
         parser::pddl::toString(req) << "]" << std::endl;
     }
-    // if(!requirements.empty())
-    //   return std::nullopt;
+    if(!requirements.empty() && action_sequence.begin()->time < 1.0) //an action really close to the start of the plan will fail -> abort plan immediately
+      return std::nullopt;
     //assert(requirements.empty());
 
     action_sequence.erase(action_sequence.begin());
