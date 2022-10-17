@@ -31,6 +31,7 @@ def generate_launch_description():
     namespace = LaunchConfiguration('namespace')
     params_file = LaunchConfiguration('params_file')
     default_action_bt_xml_filename = LaunchConfiguration('default_action_bt_xml_filename')
+    planner = LaunchConfiguration('planner')
     planning_mode = LaunchConfiguration('planning_mode')
 
     declare_model_file_cmd = DeclareLaunchArgument(
@@ -53,7 +54,12 @@ def generate_launch_description():
           get_package_share_directory('plansys2_executor'),
           'behavior_trees', 'plansys2_action_bt.xml'),
         description='BT representing a PDDL action')
-      
+    
+    declare_planner_cmd = DeclareLaunchArgument(
+        'planner',
+        default_value='POPF',
+        description='planner')
+
     declare_planning_mode_cmd = DeclareLaunchArgument(
         'planning_mode',
         default_value='offline',
@@ -69,6 +75,7 @@ def generate_launch_description():
           {
             'model_file': model_file,
             'default_action_bt_xml_filename': default_action_bt_xml_filename,
+            'planner': planner,
             'planning_mode': planning_mode
           },
           params_file
@@ -81,6 +88,7 @@ def generate_launch_description():
     ld.add_action(declare_default_bt_file_cmd)
     ld.add_action(declare_namespace_cmd)
     ld.add_action(declare_params_file_cmd)
+    ld.add_action(declare_planner_cmd)
     ld.add_action(declare_planning_mode_cmd)
 
     # Declare the launch options

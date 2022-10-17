@@ -37,6 +37,7 @@ int main(int argc, char ** argv)
   auto domain_node = std::make_shared<plansys2::DomainExpertNode>();
   auto problem_node = std::make_shared<plansys2::ProblemExpertNode>();
   auto planner_node = std::make_shared<plansys2::PlannerNode>();
+  planner_node->declare_parameter("planner", "POPF");
   planner_node->declare_parameter("planning_mode", "offline");
   bool start_planner = planner_node->get_parameter("planning_mode").as_string() == "offline";
   auto executor_node = std::make_shared<plansys2::ExecutorNode>();

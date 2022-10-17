@@ -5,3 +5,5 @@ planner:
       plugin: "plansys2/POPFPlanSolver"
     TFD:
       plugin: "plansys2/TFDPlanSolver"
+    JAVAFF:
+      plugin: "plansys2/JavaFFPlanSolver"

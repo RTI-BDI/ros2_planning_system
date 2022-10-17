@@ -77,9 +77,7 @@ POPFPlanSolver::getPlan(
   problem_out.close();
 
   int status = system(
-    ("ros2 run popf popf " +
-    lc_node_->get_parameter(parameter_name_).value_to_string() +
-    " /tmp/" + node_namespace + "/domain.pddl /tmp/" + node_namespace +
+    ("ros2 run javaff javaff_offline /tmp/" + node_namespace + "/domain.pddl /tmp/" + node_namespace +
     "/problem.pddl > /tmp/" + node_namespace + "/plan").c_str());
 
   if (status == -1) {
@@ -99,12 +97,14 @@ POPFPlanSolver::getPlan(
       } else if (solution && line.front() != ';' && isTSPActionLine(line)) {
         plansys2_msgs::msg::PlanItem item;
         size_t colon_pos = line.find(":");
-        size_t colon_par = line.find(")");
-        size_t colon_bra = line.find("[");
+        size_t colon_par1 = line.find("(");
+        size_t colon_par2 = line.find(")");
+        size_t colon_bra1 = line.find("[");
+        size_t colon_bra2 = line.find("]");
 
         std::string time = line.substr(0, colon_pos);
-        std::string action = line.substr(colon_pos + 2, colon_par - colon_pos - 1);
-        std::string duration = line.substr(colon_bra + 1);
+        std::string action = line.substr(colon_par1, colon_par2 - colon_par1 + 1);
+        std::string duration = line.substr(colon_bra1 + 1, colon_bra2 - colon_bra1 - 1);
         duration.pop_back();
 
         item.time = std::stof(time);

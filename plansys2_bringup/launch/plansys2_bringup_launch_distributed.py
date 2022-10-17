@@ -30,6 +30,7 @@ def generate_launch_description():
     model_file = LaunchConfiguration('model_file')
     namespace = LaunchConfiguration('namespace')
     params_file = LaunchConfiguration('params_file')
+    planner = LaunchConfiguration('planner')
     planning_mode = LaunchConfiguration('planning_mode')
     default_action_bt_xml_filename = LaunchConfiguration('default_action_bt_xml_filename')
 
@@ -41,6 +42,11 @@ def generate_launch_description():
         'namespace',
         default_value='',
         description='Namespace')
+    
+    declare_planner_cmd = DeclareLaunchArgument(
+        'planner',
+        default_value='POPF',
+        description='planner')
     
     declare_planning_mode_cmd = DeclareLaunchArgument(
         'planning_mode',
@@ -89,6 +95,7 @@ def generate_launch_description():
         launch_arguments={
           'namespace': namespace,
           'params_file': params_file,
+          'planner': planner,
           'planning_mode': planning_mode
         }.items())
 
@@ -118,6 +125,7 @@ def generate_launch_description():
     ld.add_action(declare_default_bt_file_cmd)
     ld.add_action(declare_namespace_cmd)
     ld.add_action(declare_params_file_cmd)
+    ld.add_action(declare_planner_cmd)
     ld.add_action(declare_planning_mode_cmd)
 
     # Declare the launch options

@@ -23,7 +23,7 @@
 #include <fstream>
 
 #include "plansys2_msgs/msg/plan_item.hpp"
-#include "plansys2_popf_plan_solver/popf_plan_solver.hpp"
+#include "plansys2_javaff_plan_solver/javaff_plan_solver.hpp"
 
 namespace plansys2
 {
@@ -35,11 +35,11 @@ bool isTSPActionLine(const std::string& line)
           line.find("[") != std::string::npos && line.find("]") != std::string::npos;
 }
 
-POPFPlanSolver::POPFPlanSolver()
+JavaFFPlanSolver::JavaFFPlanSolver()
 {
 }
 
-void POPFPlanSolver::configure(
+void JavaFFPlanSolver::configure(
   rclcpp_lifecycle::LifecycleNode::SharedPtr & lc_node,
   const std::string & plugin_name)
 {
@@ -49,7 +49,7 @@ void POPFPlanSolver::configure(
 }
 
 std::optional<plansys2_msgs::msg::Plan>
-POPFPlanSolver::getPlan(
+JavaFFPlanSolver::getPlan(
   const std::string & domain, const std::string & problem,
   const std::string & node_namespace)
 {
@@ -77,9 +77,7 @@ POPFPlanSolver::getPlan(
   problem_out.close();
 
   int status = system(
-    ("ros2 run popf popf " +
-    lc_node_->get_parameter(parameter_name_).value_to_string() +
-    " /tmp/" + node_namespace + "/domain.pddl /tmp/" + node_namespace +
+    ("ros2 run javaff javaff_offline /tmp/" + node_namespace + "/domain.pddl /tmp/" + node_namespace +
     "/problem.pddl > /tmp/" + node_namespace + "/plan").c_str());
 
   if (status == -1) {
@@ -99,12 +97,14 @@ POPFPlanSolver::getPlan(
       } else if (solution && line.front() != ';' && isTSPActionLine(line)) {
         plansys2_msgs::msg::PlanItem item;
         size_t colon_pos = line.find(":");
-        size_t colon_par = line.find(")");
-        size_t colon_bra = line.find("[");
+        size_t colon_par1 = line.find("(");
+        size_t colon_par2 = line.find(")");
+        size_t colon_bra1 = line.find("[");
+        size_t colon_bra2 = line.find("]");
 
         std::string time = line.substr(0, colon_pos);
-        std::string action = line.substr(colon_pos + 2, colon_par - colon_pos - 1);
-        std::string duration = line.substr(colon_bra + 1);
+        std::string action = line.substr(colon_par1, colon_par2 - colon_par1 + 1);
+        std::string duration = line.substr(colon_bra1 + 1, colon_bra2 - colon_bra1 - 1);
         duration.pop_back();
 
         item.time = std::stof(time);
@@ -125,7 +125,7 @@ POPFPlanSolver::getPlan(
 }
 
 bool
-POPFPlanSolver::is_valid_domain(
+JavaFFPlanSolver::is_valid_domain(
   const std::string & domain,
   const std::string & node_namespace)
 {
@@ -146,7 +146,7 @@ POPFPlanSolver::is_valid_domain(
   problem_out.close();
 
   int status = system(
-    ("ros2 run popf popf /tmp/" + node_namespace + "/check_domain.pddl /tmp/" +
+    ("ros2 run javaff javaff_offline /tmp/" + node_namespace + "/check_domain.pddl /tmp/" +
     node_namespace + "/check_problem.pddl > /tmp/" + node_namespace + "/check.out").c_str());
 
   if (status == -1) {
@@ -165,4 +165,4 @@ POPFPlanSolver::is_valid_domain(
 }  // namespace plansys2
 
 #include "pluginlib/class_list_macros.hpp"
-PLUGINLIB_EXPORT_CLASS(plansys2::POPFPlanSolver, plansys2::PlanSolverBase);
+PLUGINLIB_EXPORT_CLASS(plansys2::JavaFFPlanSolver, plansys2::PlanSolverBase);

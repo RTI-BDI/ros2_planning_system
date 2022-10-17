@@ -22,6 +22,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     namespace = LaunchConfiguration('namespace')
     params_file = LaunchConfiguration('params_file')
+    planner = LaunchConfiguration('planner')
     planning_mode = LaunchConfiguration('planning_mode')
 
     declare_namespace_cmd = DeclareLaunchArgument(
@@ -34,6 +35,11 @@ def generate_launch_description():
         default_value='offline',
         description='planning_mode')
 
+    declare_planner_cmd = DeclareLaunchArgument(
+        'planner',
+        default_value='POPF',
+        description='planner')
+
     # Specify the actions
     planner_cmd = Node(
         package='plansys2_planner',
@@ -42,12 +48,13 @@ def generate_launch_description():
         namespace=namespace,
         output='screen',
         condition=IfCondition(PythonExpression(["'", planning_mode, "' == 'offline'"])),
-        parameters=[params_file])
+        parameters=[params_file, {"planner": planner}])
 
     # Create the launch description and populate
     ld = LaunchDescription()
 
     ld.add_action(declare_namespace_cmd)
+    ld.add_action(declare_planner_cmd)
     ld.add_action(declare_planning_mode_cmd)
 
     # Declare the launch options
