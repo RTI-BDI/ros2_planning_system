@@ -15,6 +15,7 @@
 #include <filesystem>
 
 #include <algorithm>
+#include <chrono>
 #include <string>
 #include <memory>
 #include <iostream>
@@ -55,6 +56,7 @@
 #include "plansys2_executor/behavior_tree/apply_atend_effect_node.hpp"
 
 using plansys2_msgs::msg::PlanItem;
+using namespace std::chrono;
 
 namespace plansys2
 {
@@ -157,6 +159,9 @@ ExecutorNode::on_configure(const rclcpp_lifecycle::State & state)
   executing_plan_pub_ = create_publisher<plansys2_msgs::msg::Plan>(
     "executing_plan", rclcpp::QoS(100).transient_local());
 
+  computing_bt_pub_ = create_publisher<std_msgs::msg::Bool>(
+    "computing_bt", rclcpp::QoS(100).transient_local());
+
   aux_node_ = std::make_shared<rclcpp::Node>("executor_helper");
   domain_client_ = std::make_shared<plansys2::DomainExpertClient>();
   problem_client_ = std::make_shared<plansys2::ProblemExpertClient>();
@@ -173,6 +178,7 @@ ExecutorNode::on_activate(const rclcpp_lifecycle::State & state)
   dotgraph_pub_->on_activate();
   execution_info_pub_->on_activate();
   executing_plan_pub_->on_activate();
+  computing_bt_pub_->on_activate();
   RCLCPP_INFO(get_logger(), "[%s] Activated", get_name());
 
   return CallbackReturnT::SUCCESS;
@@ -184,6 +190,7 @@ ExecutorNode::on_deactivate(const rclcpp_lifecycle::State & state)
   RCLCPP_INFO(get_logger(), "[%s] Deactivating...", get_name());
   dotgraph_pub_->on_deactivate();
   executing_plan_pub_->on_deactivate();
+  computing_bt_pub_->on_activate();
   RCLCPP_INFO(get_logger(), "[%s] Deactivated", get_name());
 
   return CallbackReturnT::SUCCESS;
@@ -195,6 +202,7 @@ ExecutorNode::on_cleanup(const rclcpp_lifecycle::State & state)
   RCLCPP_INFO(get_logger(), "[%s] Cleaning up...", get_name());
   dotgraph_pub_.reset();
   executing_plan_pub_.reset();
+  computing_bt_pub_.reset();
   RCLCPP_INFO(get_logger(), "[%s] Cleaned up", get_name());
 
   return CallbackReturnT::SUCCESS;
@@ -206,6 +214,7 @@ ExecutorNode::on_shutdown(const rclcpp_lifecycle::State & state)
   RCLCPP_INFO(get_logger(), "[%s] Shutting down...", get_name());
   dotgraph_pub_.reset();
   executing_plan_pub_.reset();
+  computing_bt_pub_.reset();
   RCLCPP_INFO(get_logger(), "[%s] Shutted down", get_name());
 
   return CallbackReturnT::SUCCESS;
@@ -456,11 +465,20 @@ int ExecutorNode::count_committed_actions()
 void
 ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
 {
+  // Get starting timepoint
+  auto start = high_resolution_clock::now();
+
   auto feedback = std::make_shared<ExecutePlan::Feedback>();
   auto result = std::make_shared<ExecutePlan::Result>();
   result->success = false;
+  // Get ending timepoint
+  // auto stop1 = high_resolution_clock::now();
+  // std::cout<< "ExecutorNode init1, duration = " << (duration_cast<microseconds>(stop1 - start)).count() << " us " << std::flush << std::endl;
 
   reset_plan_exec_data();
+  // Get ending timepoint
+  // auto stop2 = high_resolution_clock::now();
+  // std::cout<< "ExecutorNode init2, duration = " << (duration_cast<microseconds>(stop2 - stop1)).count() << " us " << std::flush << std::endl;
   current_plan_ = goal_handle->get_goal()->plan;
 
   if (!current_plan_.has_value()) {
@@ -474,10 +492,19 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
     return;
   }
 
+
+  // Get ending timepoint
+  // auto stop3 = high_resolution_clock::now();
+  // std::cout<< "ExecutorNode init3, duration = " << (duration_cast<microseconds>(stop3 - stop2)).count() << " us " << std::flush << std::endl;
+
   for(int i = 0; i < current_plan_.value().items.size(); i++)
     current_plan_.value().items[i].committed = true;
 
   executing_plan_pub_->publish(current_plan_.value());
+
+  // Get ending timepoint
+  // auto stop4 = high_resolution_clock::now();
+  // std::cout<< "ExecutorNode init4, duration = " << (duration_cast<microseconds>(stop4 - stop3)).count() << " us " << std::flush << std::endl;
 
   action_map_ = std::make_shared<std::map<std::string, ActionExecutionInfo>>();
   auto action_timeout_actions = this->get_parameter("action_timeouts.actions").as_string_array();
@@ -508,6 +535,16 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
   }
   ordered_sub_goals_ = getOrderedSubGoals();
 
+  // Get ending timepoint
+  auto stop5 = high_resolution_clock::now();
+  auto msgTrue = std_msgs::msg::Bool{};msgTrue.data = true;
+  auto msgFalse = std_msgs::msg::Bool{};msgFalse.data = false;
+  computing_bt_pub_->publish(msgTrue);
+  //std::cout<< "ExecutorNode init5, duration = " << (duration_cast<microseconds>(stop5 - stop4)).count() << " us " << std::flush << std::endl;
+
+  //ATTENTION REQUIRED: section below can take a lot of time, growing linearly with plan size
+
+
   BTBuilder bt_builder(aux_node_, action_bt_xml_);
   auto blackboard = BT::Blackboard::create();
 
@@ -527,7 +564,13 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
   factory.registerNodeType<CheckTimeout>("CheckTimeout");
 
   auto action_graph_opt = bt_builder.get_graph(current_plan_.value());
-  
+
+  // Get ending timepoint
+  auto stop6 = high_resolution_clock::now();
+
+  std::cout<< "ExecutorNode init6, duration = " << (duration_cast<microseconds>(stop6 - stop5)).count() << " us " << std::flush << std::endl;
+  computing_bt_pub_->publish(msgFalse);
+
   if(action_graph_opt.has_value())
   {
     auto action_graph = action_graph_opt.value();
@@ -543,9 +586,16 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
     std::ofstream out(std::string("/tmp/") + get_namespace() + "/bt.xml");
     out << bt_xml_tree;
     out.close();
-
+    // Get ending timepoint
+    // auto stop7 = high_resolution_clock::now();
+    // std::cout<< "ExecutorNode init7, duration = " << (duration_cast<microseconds>(stop7 - stop6)).count() << " us " << std::flush << std::endl;
+    
     tree_ = factory.createTreeFromText(bt_xml_tree, blackboard);
     
+
+    // Get ending timepoint
+    // auto stop8 = high_resolution_clock::now();
+    // std::cout<< "ExecutorNode init8, duration = " << (duration_cast<microseconds>(stop8 - stop7)).count() << " us " << std::flush << std::endl;
     // Set in WaitAction node reference to early stop action string such that they know whether to stop advancement
     // in case of an earlier stop requested (e.g. if b->c, therefore in c WaitAction for b and early stop in b is 
     // requested WaitAction for b in c does not grant any futher progress)
@@ -572,6 +622,10 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
 
     actions_waiting_map_ = build_actions_waiting_map(tree_);
 
+    // Get ending timepoint
+    // auto stop9 = high_resolution_clock::now();
+    // std::cout<< "ExecutorNode init9, duration = " << (duration_cast<microseconds>(stop9 - stop8)).count() << " us " << std::flush << std::endl;
+
     #ifdef ZMQ_FOUND
       unsigned int publisher_port = this->get_parameter("publisher_port").as_int();
       unsigned int server_port = this->get_parameter("server_port").as_int();
@@ -593,7 +647,7 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
         }
       }
     #endif
-
+    
     auto info_pub = create_wall_timer(
       1s, [this]() {
         auto msgs = get_feedback_info();
@@ -605,6 +659,10 @@ ExecutorNode::execute(const std::shared_ptr<GoalHandleExecutePlan> goal_handle)
     rclcpp::Rate rate(10);
     auto start = now();
     auto status = BT::NodeStatus::RUNNING;
+
+     // Get ending timepoint
+    // auto stop10 = high_resolution_clock::now();
+    // std::cout<< "ExecutorNode init10, duration = " << (duration_cast<microseconds>(stop10 - stop9)).count() << " us " << std::flush << std::endl;
 
     while (status == BT::NodeStatus::RUNNING && !cancel_plan_requested_) {
       try {

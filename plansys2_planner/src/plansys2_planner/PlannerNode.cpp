@@ -28,7 +28,7 @@ namespace plansys2
 PlannerNode::PlannerNode()
 : rclcpp_lifecycle::LifecycleNode("planner"),
   lp_loader_("plansys2_core", "plansys2::PlanSolverBase"),
-  default_ids_{},
+  default_ids_{"POPF", "plansys2/POPFPlanSolver"},
   default_types_{}
 {
   get_plan_service_ = create_service<plansys2_msgs::srv::GetPlan>(
@@ -51,19 +51,17 @@ PlannerNode::on_configure(const rclcpp_lifecycle::State & state)
 {
   auto node = shared_from_this();
 
-  RCLCPP_INFO(get_logger(), "[%s] Configuring...", get_name());
-
+  RCLCPP_INFO(get_logger(), "[%s] Configuring, selected planner: " + get_parameter("planner").as_string(), get_name());
   solver_ids_ = get_parameter("plan_solver_plugins").as_string_array();
-  if(solver_ids_.empty())
-  {
-    auto planner = get_parameter("planner").as_string();
-    if(planner.find("POPF") != std::string::npos)
-      solver_ids_ = {"POPF", "plansys2/POPFPlanSolver"};
-    else if(planner.find("TFD") != std::string::npos)
-      solver_ids_ = {"TFD", "plansys2/TFDPlanSolver"};
-    else if(planner.find("JAVAFF") != std::string::npos)
-      solver_ids_ = {"JAVAFF", "plansys2/JavaFFPlanSolver"};
-  }
+
+  auto planner = get_parameter("planner").as_string();
+  if(planner.find("POPF") != std::string::npos)
+    solver_ids_ = {"POPF", "plansys2/POPFPlanSolver"};
+  else if(planner.find("TFD") != std::string::npos)
+    solver_ids_ = {"TFD", "plansys2/TFDPlanSolver"};
+  else if(planner.find("JAVAFF") != std::string::npos)
+    solver_ids_ = {"JAVAFF", "plansys2/JavaFFPlanSolver"};
+
 
   if (!solver_ids_.empty()) {
     try {

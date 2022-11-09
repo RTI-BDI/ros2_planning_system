@@ -1,6 +1,6 @@
 planner:
   ros__parameters:
-    plan_solver_plugins: ["POPF"]
+    plan_solver_plugins: ["POPF", "plansys2/POPFPlanSolver"]
     POPF:
       plugin: "plansys2/POPFPlanSolver"
     TFD:
