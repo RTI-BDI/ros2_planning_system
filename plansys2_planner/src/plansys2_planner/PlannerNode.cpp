@@ -51,7 +51,7 @@ PlannerNode::on_configure(const rclcpp_lifecycle::State & state)
 {
   auto node = shared_from_this();
 
-  RCLCPP_INFO(get_logger(), "[%s] Configuring, selected planner: " + get_parameter("planner").as_string(), get_name());
+  RCLCPP_INFO(get_logger(), "[%s] Configuring, selected planner: %s", get_name(), get_parameter("planner").as_string().c_str());
   solver_ids_ = get_parameter("plan_solver_plugins").as_string_array();
 
   auto planner = get_parameter("planner").as_string();
