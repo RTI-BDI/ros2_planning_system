@@ -17,6 +17,7 @@
   <depend>action_msgs</depend>
   <depend>builtin_interfaces</depend>
   <depend>rosidl_default_generators</depend>
+  <depend>qt_gui_cpp</depend>
 
   <member_of_group>rosidl_interface_packages</member_of_group>
 
